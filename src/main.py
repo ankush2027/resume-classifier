@@ -84,17 +84,3 @@ pickle.dump(model, open("model.pkl", "wb"))
 
 print("\nModel saved as model.pkl")
 
-
-# Predict category for a new resume
-sample_resume = """
-Experienced Python developer with knowledge of machine learning,
-pandas, numpy, and data analysis.
-"""
-
-cleaned = clean_resume(sample_resume)
-
-vector = tfidf.transform([cleaned])
-
-prediction = model.predict(vector)
-
-print("\nPredicted Category:", prediction[0])
