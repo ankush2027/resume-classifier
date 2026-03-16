@@ -80,7 +80,8 @@ print("\nLogistic Regression Accuracy:", accuracy_score(y_test, lr_pred))
 
 
 # Save the trained model
-pickle.dump(model, open("model.pkl", "wb"))
+with open("model.pkl", "wb") as f:
+    pickle.dump((model, tfidf), f)
 
-print("\nModel saved as model.pkl")
+print("Model and TF-IDF vectorizer saved successfully")
 
