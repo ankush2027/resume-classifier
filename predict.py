@@ -28,13 +28,23 @@ model = pickle.load(open("model.pkl", "rb"))
 print("Model loaded successfully")
 
 
-# user input for prediction
-sample_resume = input("Enter resume text:\n")
+# user input for multiple resume prediction
+print("\nResume Role Classifier Started")
+print("Paste resume text (type 'exit' to stop)\n")
 
-cleaned = clean_resume(sample_resume)
+while True:
 
-vector = tfidf.transform([cleaned])
+    sample_resume = input("Enter resume text:\n")
 
-prediction = model.predict(vector)
+    cleaned = clean_resume(sample_resume)
 
-print("Predicted Category:", prediction[0])
+    vector = tfidf.transform([cleaned])
+
+    prediction = model.predict(vector)
+
+    print("Predicted Category:", prediction[0])
+    
+    if sample_resume.lower() == "exit":
+        print("Exiting classifier...")
+        break
+
