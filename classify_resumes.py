@@ -1,6 +1,7 @@
 import pandas as pd
 import pickle
 import re
+import os
 
 # text cleaning function
 def clean_resume(text):
@@ -37,10 +38,26 @@ predictions = model.predict(X)
 
 # add predictions to dataframe
 df["Predicted_Category"] = predictions
+
+# remove cleaned column (not needed for HR)
 df = df.drop(columns=["cleaned_resume"])
 
-print("Saving results...")
+# create output folder if it doesn't exist
+os.makedirs("output", exist_ok=True)
 
-df.to_csv("classified_resumes.csv", index=False)
+print("Saving grouped resume files...")
 
-print("Done! File saved as classified_resumes.csv")
+# group resumes by predicted category
+for category in df["Predicted_Category"].unique():
+
+    category_df = df[df["Predicted_Category"] == category]
+
+    filename = category.replace(" ", "_") + "_resumes.csv"
+
+    filepath = os.path.join("output", filename)
+
+    category_df.to_csv(filepath, index=False)
+
+    print(f"Saved {filepath}")
+
+print("All resumes classified successfully!")
