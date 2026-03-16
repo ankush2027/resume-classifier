@@ -28,11 +28,8 @@ model = pickle.load(open("model.pkl", "rb"))
 print("Model loaded successfully")
 
 
-# sample resume to test
-sample_resume = """
-Experienced Java developer with Spring Boot,
-microservices architecture and backend development.
-"""
+# user input for prediction
+sample_resume = input("Enter resume text:\n")
 
 cleaned = clean_resume(sample_resume)
 
