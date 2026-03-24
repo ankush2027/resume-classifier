@@ -17,13 +17,13 @@ def clean_resume(text):
 print("Loading trained model...")
 
 # load model and vectorizer
-with open("model.pkl", "rb") as f:
+with open("models/model.pkl", "rb") as f:
     model, tfidf = pickle.load(f)
 
 print("Reading resumes...")
 
 # read CSV file containing resumes
-df = pd.read_csv("resumes_to_classify.csv")
+df = pd.read_csv("data/input/resumes_to_classify.csv")
 
 # clean resumes
 df["cleaned_resume"] = df["Resume"].apply(clean_resume)

@@ -23,7 +23,7 @@ df['cleaned'] = df['Resume'].apply(clean_resume)
 tfidf.fit(df['cleaned'])
 
 # load saved model
-model = pickle.load(open("model.pkl", "rb"))
+model = pickle.load(open("models/model.pkl", "rb"))
 
 print("Model loaded successfully")
 

@@ -3,7 +3,7 @@ import re
 import pickle
 
 # Load dataset
-df = pd.read_csv("data/resume_dataset.csv")
+df = pd.read_csv("data/raw/resume_dataset.csv")
 
 # First 5 rows
 print(df.head())
@@ -80,8 +80,7 @@ print("\nLogistic Regression Accuracy:", accuracy_score(y_test, lr_pred))
 
 
 # Save the trained model
-with open("model.pkl", "wb") as f:
+with open("models/model.pkl", "wb") as f:
     pickle.dump((model, tfidf), f)
 
 print("Model and TF-IDF vectorizer saved successfully")
-
