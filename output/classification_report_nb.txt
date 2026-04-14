@@ -1,0 +1,33 @@
+Naive Bayes Accuracy: 0.9533678756476683
+
+                           precision    recall  f1-score   support
+
+                 Advocate       1.00      0.25      0.40         4
+                     Arts       1.00      1.00      1.00         7
+       Automation Testing       1.00      0.40      0.57         5
+               Blockchain       1.00      1.00      1.00         8
+         Business Analyst       1.00      1.00      1.00         6
+           Civil Engineer       1.00      1.00      1.00         5
+             Data Science       1.00      1.00      1.00         8
+                 Database       1.00      1.00      1.00         7
+          DevOps Engineer       1.00      1.00      1.00        11
+         DotNet Developer       1.00      0.40      0.57         5
+            ETL Developer       1.00      1.00      1.00         8
+   Electrical Engineering       1.00      1.00      1.00         6
+                       HR       1.00      1.00      1.00         9
+                   Hadoop       1.00      1.00      1.00         8
+       Health and fitness       1.00      1.00      1.00         6
+           Java Developer       0.71      1.00      0.83        17
+      Mechanical Engineer       1.00      1.00      1.00         8
+Network Security Engineer       1.00      1.00      1.00         5
+       Operations Manager       1.00      1.00      1.00         8
+                      PMO       1.00      1.00      1.00         6
+         Python Developer       1.00      1.00      1.00        10
+            SAP Developer       1.00      1.00      1.00         5
+                    Sales       1.00      1.00      1.00         8
+                  Testing       0.88      1.00      0.93        14
+            Web Designing       1.00      1.00      1.00         9
+
+                 accuracy                           0.95       193
+                macro avg       0.98      0.92      0.93       193
+             weighted avg       0.97      0.95      0.95       193
