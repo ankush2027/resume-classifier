@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Pooja,"Sales executive with experience in client handling, product promotion, and revenue generation.",Sales
+Predicted_Category,Confidence_%,Method,Name,Resume
+Sales,6.0%,keyword,Pooja,"Sales executive with experience in client handling, product promotion, and revenue generation."

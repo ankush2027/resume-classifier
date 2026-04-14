@@ -1,67 +1,91 @@
-# Resume Classification using Machine Learning
+# Resume Classification System 🚀
 
-## Project Overview
+A machine learning system that automatically classifies real-world resumes into exactly **25 job categories**. 
 
-This project builds a machine learning model that automatically classifies resumes into different job categories based on the resume text.
+Built to solve a real-world problem: companies receive resumes from multiple platforms (job portals, email, LinkedIn, etc.) in extremely different formats. This system handles them all automatically. It reads standard **PDFs, Word Documents (.docx), Text files (.txt), and even Image-based Scanned Resumes (.png, .jpg) via OCR!**
 
-The system analyzes resume content and predicts the most relevant job role such as Data Science, Java Developer, HR, Web Designing, and others.
+---
 
-## Dataset
+## 🌟 Key Features
 
-The dataset contains **962 resumes** across **25 job categories**.
+- **Multi-Format Extraction:** Automatically extracts text from `.pdf`, `.docx`, and `.txt`.
+- **Built-in OCR (Optical Character Recognition):** Can read scanned, photograph-based PDFs, `.jpg`, and `.png` image models via `Tesseract` and `pdf2image`.
+- **Hybrid AI Pipeline:** Uses a high-accuracy Machine Learning Model (Logistic Regression / TF-IDF) as the primary pipeline, but auto-falls back to a highly tuned **Domain Keyword System** if ML confidence is low on poorly formatted real-world resumes.
+- **Smart Folder Batching:** Drop 100 random files in a folder, run one script, and get 25 beautifully organized folders sorted by job category.
 
-Each record includes:
+---
 
-* **Resume** – Full resume text
-* **Category** – Job role label
+## 🛠 Project Structure
 
-## Technologies Used
-
-* Python
-* Pandas
-* Scikit-learn
-
-## Machine Learning Pipeline
-
-1. Load the resume dataset
-2. Clean and preprocess the resume text
-3. Convert text into numerical features using TF-IDF
-4. Split dataset into training and testing sets
-5. Train a Naive Bayes classification model
-6. Evaluate model accuracy
-7. Predict the category of new resumes
-
-## Model Used
-
-Naive Bayes Classifier
-
-## Model Performance
-
-Accuracy achieved: **96%**
-
-## Project Structure
-
-resume-classifier
+```text
+resume-classifier/
 │
-├── data
-│   └── resume_dataset.csv
+├── data/
+│   ├── raw/
+│   │   └── resume_dataset.csv          ← Main ML Training dataset (962 resumes)
+│   └── input/
+│       ├── resumes/                    ← DROP RESUMES HERE (.pdf, .png, .docx)
+│       └── resumes_to_classify.csv     ← Fallback CSV if folder is empty!
 │
-├── src
-│   └── main.py
+├── src/
+│   ├── main.py                         ← Train models, save best one (Run this first!)
+│   ├── classify_resumes.py             ← Batch classify your 'input/resumes/' folder
+│   └── predict.py                      ← Interactive single-resume terminal tool
 │
+├── models/                             ← Saved generated ML models
+├── output/                             ← Automatically cleared & recreated results
 ├── requirements.txt
 └── README.md
+```
 
-## Example Prediction
+---
 
-Input Resume:
-Experienced Python developer with knowledge of machine learning, pandas, numpy, and data analysis.
+## 🚀 How To Install & Run
 
-Predicted Category:
-Data Science
+**If you are downloading this onto a new Mac/Laptop**, follow these exact steps to make sure Image/OCR scanning works perfectly:
 
-## Future Improvements
+### 1. Install System Requirements (For OCR Image Scanning)
+To read scanned PDF images or pictures of resumes, this project relies on Poppler and Tesseract.
+If you are on a Mac, run this in your terminal:
+```bash
+brew install tesseract poppler
+```
+*(If on Ubuntu: `sudo apt-get install tesseract-ocr poppler-utils`)*
 
-* Trying additional models such as SVM or Logistic Regression
-* Building a web interface for uploading resumes
-* Improving text preprocessing
+### 2. Set Up Python Environment
+```bash
+cd resume-classifier
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+*(Note: `requirements.txt` should include `pdfplumber`, `python-docx`, `pytesseract`, `pdf2image`, `pandas`, `scikit-learn`, `pillow`.)*
+
+### 3. Train the Model 🧠
+You **must** run this first! It trains the AI on multiple models, compares their accuracy, and saves the perfect one (100% Accuracy on training).
+```bash
+python3 src/main.py
+```
+
+### 4. Batch Classify Real Resumes 📂
+**Option A (Folder Mode):** Simply drag and drop all your PDFs, Word files, and Images directly into the `data/input/resumes/` folder!
+**Option B (CSV Mode):** If the folder is empty, the code dynamically falls back to the `resumes_to_classify.csv` file automatically.
+
+Then, run:
+```bash
+python3 src/classify_resumes.py
+```
+*Results will automatically generate beautifully separated CSVs in the `output/` folder.*
+
+### 5. Check a Single File Interactively 🔍
+Need to check just one candidate quickly? Run:
+```bash
+python3 src/predict.py
+```
+It will open an interactive prompt. You can **paste a file path** (`/Users/You/resume.pdf` or `.png`) directly, or just copy and paste raw resume text to instantly see a breakdown of the ML prediction and accuracy!
+
+---
+
+## 📌 Troubleshooting
+- **`EmptyDataError` when running `main.py`:** Make sure your `data/raw/resume_dataset.csv` file actually has data in it and isn't 0 bytes! (You can type `git restore data/raw/resume_dataset.csv` if you accidentally cleared it).
+- **File skipped because of "zlib / corrupted" error:** Sometimes downloaded PDFs are physically corrupted (zero text layer and compressed incorrectly). Open the file in Mac's *Preview* app, select `File -> Export as PDF`, and save a fresh copy. Then the script will read it immediately.

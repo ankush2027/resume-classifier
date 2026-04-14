@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Kunal,"Electrical engineer with knowledge of circuit design, power systems, and control systems.",Electrical Engineering
+Predicted_Category,Confidence_%,Method,Name,Resume
+Electrical Engineering,15.1%,keyword,Kunal,"Electrical engineer with knowledge of circuit design, power systems, and control systems."

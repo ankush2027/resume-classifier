@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Vikram,"DevOps engineer experienced in Docker, Kubernetes, Jenkins, CI/CD pipelines, and AWS cloud infrastructure.",DevOps Engineer
+Predicted_Category,Confidence_%,Method,Name,Resume
+DevOps Engineer,12.6%,keyword,Vikram,"DevOps engineer experienced in Docker, Kubernetes, Jenkins, CI/CD pipelines, and AWS cloud infrastructure."

@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Meera,"Business analyst experienced in requirement gathering, stakeholder communication, and process improvement.",Business Analyst
+Predicted_Category,Confidence_%,Method,Name,Resume
+Business Analyst,17.0%,keyword,Meera,"Business analyst experienced in requirement gathering, stakeholder communication, and process improvement."

@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Sanjay,"Hadoop developer with experience in big data processing, HDFS, MapReduce, and Hive.",Hadoop
+Predicted_Category,Confidence_%,Method,Name,Resume
+Hadoop,53.6%,keyword,Sanjay,"Hadoop developer with experience in big data processing, HDFS, MapReduce, and Hive."

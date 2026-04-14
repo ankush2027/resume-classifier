@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Neha,"Python developer with experience in Django, Flask, REST APIs, and backend development.",Python Developer
+Predicted_Category,Confidence_%,Method,Name,Resume
+Python Developer,27.3%,keyword,Neha,"Python developer with experience in Django, Flask, REST APIs, and backend development."

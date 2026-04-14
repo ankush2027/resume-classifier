@@ -27,3 +27,64 @@
 2026-04-14 15:47:34,441 - INFO - LinearSVC model trained and evaluated
 2026-04-14 15:47:35,186 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
 2026-04-14 15:47:35,186 - INFO - Training completed
+2026-04-14 16:19:45,693 - INFO - Training started
+2026-04-14 16:19:45,834 - INFO - Dataset loaded successfully
+2026-04-14 16:19:46,314 - INFO - Text cleaning completed
+2026-04-14 16:19:48,957 - INFO - TF-IDF vectorization completed
+2026-04-14 16:19:49,131 - INFO - Train-test split completed
+2026-04-14 16:19:49,221 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 16:20:11,354 - INFO - Logistic Regression model trained
+2026-04-14 16:20:18,385 - INFO - LinearSVC model trained and evaluated
+2026-04-14 16:20:20,063 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 16:20:20,063 - INFO - Training completed
+2026-04-14 16:34:37,045 - INFO - Training started
+2026-04-14 16:34:37,093 - INFO - Dataset loaded successfully
+2026-04-14 16:34:37,925 - INFO - Text cleaning completed
+2026-04-14 16:34:40,622 - INFO - TF-IDF vectorization completed
+2026-04-14 16:34:40,959 - INFO - Train-test split completed
+2026-04-14 16:34:41,057 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 16:34:54,161 - INFO - Logistic Regression model trained
+2026-04-14 16:35:00,440 - INFO - LinearSVC model trained and evaluated
+2026-04-14 16:35:01,439 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 16:35:01,440 - INFO - Training completed
+2026-04-14 16:41:53,370 - INFO - Training started
+2026-04-14 16:41:53,414 - INFO - Dataset loaded successfully
+2026-04-14 16:41:54,174 - INFO - Text cleaning completed
+2026-04-14 16:41:58,042 - INFO - TF-IDF vectorization completed
+2026-04-14 16:41:58,331 - INFO - Train-test split completed
+2026-04-14 16:41:58,438 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 16:42:07,303 - INFO - Logistic Regression model trained
+2026-04-14 16:42:13,838 - INFO - LinearSVC model trained and evaluated
+2026-04-14 16:42:14,862 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 16:42:14,862 - INFO - Training completed
+2026-04-14 17:10:37,493 - INFO - Training started
+2026-04-14 17:11:38,351 - INFO - Training started
+2026-04-14 17:11:38,388 - INFO - Dataset loaded successfully
+2026-04-14 17:11:39,184 - INFO - Text cleaning completed
+2026-04-14 17:11:42,250 - INFO - TF-IDF vectorization completed
+2026-04-14 17:11:42,407 - INFO - Train-test split completed
+2026-04-14 17:11:42,500 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 17:11:57,542 - INFO - Logistic Regression model trained
+2026-04-14 17:12:02,606 - INFO - LinearSVC model trained and evaluated
+2026-04-14 17:12:03,370 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 17:12:03,372 - INFO - Training completed
+2026-04-14 17:12:14,681 - INFO - Training started
+2026-04-14 17:12:14,714 - INFO - Dataset loaded successfully
+2026-04-14 17:12:15,458 - INFO - Text cleaning completed
+2026-04-14 17:12:17,633 - INFO - TF-IDF vectorization completed
+2026-04-14 17:12:17,732 - INFO - Train-test split completed
+2026-04-14 17:12:17,811 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 17:12:20,050 - INFO - Logistic Regression model trained
+2026-04-14 17:12:25,019 - INFO - LinearSVC model trained and evaluated
+2026-04-14 17:12:25,839 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 17:12:25,839 - INFO - Training completed
+2026-04-14 17:14:29,391 - INFO - Training started
+2026-04-14 17:14:29,432 - INFO - Dataset loaded successfully
+2026-04-14 17:14:30,184 - INFO - Text cleaning completed
+2026-04-14 17:14:32,901 - INFO - TF-IDF vectorization completed
+2026-04-14 17:14:33,057 - INFO - Train-test split completed
+2026-04-14 17:14:33,140 - INFO - Naive Bayes model trained and evaluated
+2026-04-14 17:14:41,882 - INFO - Logistic Regression model trained
+2026-04-14 17:14:47,810 - INFO - LinearSVC model trained and evaluated
+2026-04-14 17:14:48,562 - INFO - Best model (Logistic Regression) and TF-IDF saved successfully
+2026-04-14 17:14:48,562 - INFO - Training completed

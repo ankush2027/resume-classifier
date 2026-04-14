@@ -1,3 +1,2 @@
-Name,Resume,Predicted_Category
-Anita,"Java developer with experience in Spring Boot, REST APIs, and microservices architecture. Skilled in backend development and scalable systems.",Java Developer
-Priya,"Frontend developer skilled in HTML, CSS, JavaScript, and React. Built responsive websites with focus on UI/UX design.",Java Developer
+Predicted_Category,Confidence_%,Method,Name,Resume
+Java Developer,37.2%,keyword,Anita,"Java developer with experience in Spring Boot, REST APIs, and microservices architecture. Skilled in backend development and scalable systems."

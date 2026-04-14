@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Divya,"ETL developer skilled in data warehousing, data pipelines, and tools like Informatica and SQL.",ETL Developer
+Predicted_Category,Confidence_%,Method,Name,Resume
+ETL Developer,20.4%,keyword,Divya,"ETL developer skilled in data warehousing, data pipelines, and tools like Informatica and SQL."

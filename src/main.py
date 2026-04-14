@@ -15,9 +15,8 @@ logging.basicConfig(
 
 logging.info("Training started")
 
-# ─────────────────────────────────────────────
+
 # Helper: pretty section header for terminal
-# ─────────────────────────────────────────────
 def section(title):
     print(f"\n{'─' * 50}")
     print(f"  {title}")
@@ -42,6 +41,10 @@ print(df['Category'].value_counts().to_string())
 def clean_resume(text):
     # Remove URLs
     text = re.sub(r'http\S+\s*', ' ', text)
+    # Remove email addresses (noise in real-world resumes)
+    text = re.sub(r'\S+@\S+\.\S+', ' ', text)
+    # Remove phone numbers (noise in real-world resumes)
+    text = re.sub(r'[\+\(]?[1-9][0-9 .\-\(\)]{8,}[0-9]', ' ', text)
     # Remove retweet/cc artifacts
     text = re.sub(r'\bRT\b|\bcc\b', ' ', text)
     # Remove hashtags
@@ -174,7 +177,6 @@ logging.info("LinearSVC model trained and evaluated")
 
 
 # Pick the best model to save
-# ─────────────────────────────────────────────
 scores = {
     "Naive Bayes": (nb_accuracy, nb_model),
     "Logistic Regression": (lr_accuracy, lr_model),

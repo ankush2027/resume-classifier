@@ -1,2 +1,2 @@
-Name,Resume,Predicted_Category
-Rohit,"Mechanical engineer with experience in CAD design, SolidWorks, and manufacturing processes.",Mechanical Engineer
+Predicted_Category,Confidence_%,Method,Name,Resume
+Mechanical Engineer,17.9%,keyword,Rohit,"Mechanical engineer with experience in CAD design, SolidWorks, and manufacturing processes."
