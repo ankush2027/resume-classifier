@@ -42,21 +42,37 @@ resume-classifier/
 
 ## 🚀 How To Install & Run
 
-**If you are downloading this onto a new Mac/Laptop**, follow these exact steps to make sure Image/OCR scanning works perfectly:
+**If you are downloading this onto a new machine (Mac, Windows, or Linux)**, follow these exact steps to make sure Image/OCR scanning works perfectly:
 
 ### 1. Install System Requirements (For OCR Image Scanning)
 To read scanned PDF images or pictures of resumes, this project relies on Poppler and Tesseract.
-If you are on a Mac, run this in your terminal:
+
+**Mac:**
 ```bash
 brew install tesseract poppler
 ```
-*(If on Ubuntu: `sudo apt-get install tesseract-ocr poppler-utils`)*
+
+**Windows:**
+1. Install [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki).
+2. Download [Poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases/), extract it, and add the `Library\bin` or `bin` folder to your system's PATH.
+
+*(Ubuntu: `sudo apt-get install tesseract-ocr poppler-utils`)*
 
 ### 2. Set Up Python Environment
+
+**Mac / Linux:**
 ```bash
 cd resume-classifier
 python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Windows:**
+```powershell
+cd resume-classifier
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 *(Note: `requirements.txt` should include `pdfplumber`, `python-docx`, `pytesseract`, `pdf2image`, `pandas`, `scikit-learn`, `pillow`.)*
@@ -64,7 +80,7 @@ pip install -r requirements.txt
 ### 3. Train the Model 🧠
 You **must** run this first! It trains the AI on multiple models, compares their accuracy, and saves the perfect one (100% Accuracy on training).
 ```bash
-python3 src/main.py
+python src/main.py   # Use python3 on Mac/Linux
 ```
 
 ### 4. Batch Classify Real Resumes 📂
@@ -73,14 +89,14 @@ python3 src/main.py
 
 Then, run:
 ```bash
-python3 src/classify_resumes.py
+python src/classify_resumes.py   # Use python3 on Mac/Linux
 ```
 *Results will automatically generate beautifully separated CSVs in the `output/` folder.*
 
 ### 5. Check a Single File Interactively 🔍
 Need to check just one candidate quickly? Run:
 ```bash
-python3 src/predict.py
+python src/predict.py   # Use python3 on Mac/Linux
 ```
 It will open an interactive prompt. You can **paste a file path** (`/Users/You/resume.pdf` or `.png`) directly, or just copy and paste raw resume text to instantly see a breakdown of the ML prediction and accuracy!
 
@@ -88,4 +104,4 @@ It will open an interactive prompt. You can **paste a file path** (`/Users/You/r
 
 ## 📌 Troubleshooting
 - **`EmptyDataError` when running `main.py`:** Make sure your `data/raw/resume_dataset.csv` file actually has data in it and isn't 0 bytes! (You can type `git restore data/raw/resume_dataset.csv` if you accidentally cleared it).
-- **File skipped because of "zlib / corrupted" error:** Sometimes downloaded PDFs are physically corrupted (zero text layer and compressed incorrectly). Open the file in Mac's *Preview* app, select `File -> Export as PDF`, and save a fresh copy. Then the script will read it immediately.
+- **File skipped because of "zlib / corrupted" error:** Sometimes downloaded PDFs are physically corrupted (zero text layer and compressed incorrectly). Open the file in an application like Mac's *Preview* app or a built-in PDF reader on Windows, select `Print` or `Export as PDF`, and save a fresh copy. Then the script will read it immediately.
