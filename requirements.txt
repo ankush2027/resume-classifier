@@ -1,14 +1,15 @@
 # Core ML & Data
-pandas==2.2.3
-scikit-learn==1.6.1
-scipy==1.15.2
-numpy==2.2.5
-joblib==1.4.2
+pandas>=2.0.0
+scikit-learn
+scipy>=1.10.0
+numpy>=1.22.0
+joblib
 
 # Resume File Parsing (PDF and Word documents)
-pdfplumber==0.11.9
-python-docx==1.2.0
+pdfplumber
+python-docx
+streamlit
 
 # Utilities
-matplotlib==3.10.1
-seaborn==0.13.2
+matplotlib
+seaborn

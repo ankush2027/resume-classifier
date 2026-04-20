@@ -214,95 +214,96 @@ def extract_docx(filepath):
     return " ".join([para.text for para in doc.paragraphs if para.text.strip()])
 
 
-# load model + tfidf together
-section("Resume Role Classifier")
-print("\n  Loading model...")
+if __name__ == "__main__":
+    # load model + tfidf together
+    section("Resume Role Classifier")
+    print("\n  Loading model...")
 
-try:
-    with open("models/model.pkl", "rb") as f:
-        model, tfidf = pickle.load(f)
-    print("  ✓ Model loaded successfully")
-except FileNotFoundError:
-    print("  ✗ ERROR: models/model.pkl not found. Run main.py first to train the model.")
-    sys.exit(1)
+    try:
+        with open("models/model.pkl", "rb") as f:
+            model, tfidf = pickle.load(f)
+        print("  ✓ Model loaded successfully")
+    except FileNotFoundError:
+        print("  ✗ ERROR: models/model.pkl not found. Run main.py first to train the model.")
+        sys.exit(1)
 
-print("\n  Supported inputs:")
-print("    • Paste resume text directly")
-print("    • Enter a file path to a .pdf, .docx, .txt, .png, .jpg")
-print("  Type 'exit' to quit.\n")
+    print("\n  Supported inputs:")
+    print("    • Paste resume text directly")
+    print("    • Enter a file path to a .pdf, .docx, .txt, .png, .jpg")
+    print("  Type 'exit' to quit.\n")
 
 
-# interactive loop
-while True:
-    print("─" * 50)
-    user_input = input("  Resume text or file path ▶  ").strip()
+    # interactive loop
+    while True:
+        print("─" * 50)
+        user_input = input("  Resume text or file path ▶  ").strip()
 
-    # Exit command
-    if user_input.lower() == "exit":
-        print("\n  Exiting classifier. Goodbye!\n")
-        break
+        # Exit command
+        if user_input.lower() == "exit":
+            print("\n  Exiting classifier. Goodbye!\n")
+            break
 
-    # Empty input
-    if not user_input:
-        print("  ⚠  Nothing entered. Please paste text or give a file path.\n")
-        continue
-
-    # Check if the input is a file path
-    if os.path.isfile(user_input):
-        ext = os.path.splitext(user_input)[1].lower()
-
-        if ext == ".pdf":
-            print(f"  Reading PDF: {user_input}")
-            raw_text = extract_pdf(user_input)
-        elif ext == ".docx":
-            print(f"  Reading DOCX: {user_input}")
-            raw_text = extract_docx(user_input)
-        elif ext == ".txt":
-            with open(user_input, "r", encoding="utf-8", errors="ignore") as f:
-                raw_text = f.read()
-        elif ext in [".png", ".jpg", ".jpeg"]:
-            print(f"  Reading Image: {user_input}")
-            if not OCR_SUPPORT:
-                print("  ⚠  pytesseract not installed. OCR requires Tesseract.")
-                raw_text = ""
-            else:
-                try:
-                    img = Image.open(user_input)
-                    raw_text = pytesseract.image_to_string(img)
-                except Exception as e:
-                    print(f"  ⚠  OCR failed: {e}")
-                    raw_text = ""
-        else:
-            print(f"  ⚠  Unsupported file type '{ext}'. Use .pdf, .docx, .txt or images\n")
+        # Empty input
+        if not user_input:
+            print("  ⚠  Nothing entered. Please paste text or give a file path.\n")
             continue
 
-        # Image-based PDF gives empty text — cannot classify
-        cleaned_raw = clean_pdf_text(raw_text)
-        if not cleaned_raw.strip():
+        # Check if the input is a file path
+        if os.path.isfile(user_input):
+            ext = os.path.splitext(user_input)[1].lower()
+
             if ext == ".pdf":
-                print("  ✗ Could not extract text — this appears to be an image-based PDF.")
-                print("    → It was scanned/photographed. Convert it to a text-based PDF first.\n")
+                print(f"  Reading PDF: {user_input}")
+                raw_text = extract_pdf(user_input)
+            elif ext == ".docx":
+                print(f"  Reading DOCX: {user_input}")
+                raw_text = extract_docx(user_input)
+            elif ext == ".txt":
+                with open(user_input, "r", encoding="utf-8", errors="ignore") as f:
+                    raw_text = f.read()
+            elif ext in [".png", ".jpg", ".jpeg"]:
+                print(f"  Reading Image: {user_input}")
+                if not OCR_SUPPORT:
+                    print("  ⚠  pytesseract not installed. OCR requires Tesseract.")
+                    raw_text = ""
+                else:
+                    try:
+                        img = Image.open(user_input)
+                        raw_text = pytesseract.image_to_string(img)
+                    except Exception as e:
+                        print(f"  ⚠  OCR failed: {e}")
+                        raw_text = ""
             else:
-                print("  ✗ Could not extract text from this file.\n")
-            continue
+                print(f"  ⚠  Unsupported file type '{ext}'. Use .pdf, .docx, .txt or images\n")
+                continue
 
-        sample_resume = raw_text
-    else:
-        # Treat input as pasted resume text
-        sample_resume = user_input
+            # Image-based PDF gives empty text — cannot classify
+            cleaned_raw = clean_pdf_text(raw_text)
+            if not cleaned_raw.strip():
+                if ext == ".pdf":
+                    print("  ✗ Could not extract text — this appears to be an image-based PDF.")
+                    print("    → It was scanned/photographed. Convert it to a text-based PDF first.\n")
+                else:
+                    print("  ✗ Could not extract text from this file.\n")
+                continue
 
-    prediction, confidence, top3, method = hybrid_predict(sample_resume, model, tfidf)
+            sample_resume = raw_text
+        else:
+            # Treat input as pasted resume text
+            sample_resume = user_input
 
-    method_note = "  [keyword fallback — ML confidence was low]" if method == "keyword" else ""
+        prediction, confidence, top3, method = hybrid_predict(sample_resume, model, tfidf)
 
-    print(f"\n  ┌─ Predicted Category : {prediction}")
-    if confidence > 0:
-        print(f"  │  ML Confidence      : {confidence:.1f}%")
-    if method_note:
-        print(f"  │  Note               :{method_note}")
-    if top3:
-        print(f"  │")
-        print(f"  │  Top 3 Predictions (ML):")
-        for cat, prob in top3:
-            print(f"  │    {cat:<30} {prob:.1f}%")
-    print(f"  └{'─' * 45}\n")
+        method_note = "  [keyword fallback — ML confidence was low]" if method == "keyword" else ""
+
+        print(f"\n  ┌─ Predicted Category : {prediction}")
+        if confidence > 0:
+            print(f"  │  ML Confidence      : {confidence:.1f}%")
+        if method_note:
+            print(f"  │  Note               :{method_note}")
+        if top3:
+            print(f"  │")
+            print(f"  │  Top 3 Predictions (ML):")
+            for cat, prob in top3:
+                print(f"  │    {cat:<30} {prob:.1f}%")
+        print(f"  └{'─' * 45}\n")
