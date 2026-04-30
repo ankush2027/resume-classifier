@@ -100,8 +100,17 @@ python src/predict.py   # Use python3 on Mac/Linux
 ```
 It will open an interactive prompt. You can **paste a file path** (`/Users/You/resume.pdf` or `.png`) directly, or just copy and paste raw resume text to instantly see a breakdown of the ML prediction and accuracy!
 
+### 6. Launch the Web App (Streamlit UI) 🌐
+> ⚠️ **You must complete Step 3 (Train the Model) before this step**, otherwise the app will show an error because `models/model.pkl` does not exist yet.
+
+```bash
+streamlit run app.py
+```
+This opens a browser with the full drag-and-drop web interface for batch resume classification.
+
 ---
 
 ## 📌 Troubleshooting
+- **`File does not exist` / `Invalid value` error in Streamlit:** The model hasn't been trained yet. Run `python src/main.py` first to generate `models/model.pkl`, then re-run `streamlit run app.py`.
 - **`EmptyDataError` when running `main.py`:** Make sure your `data/raw/resume_dataset.csv` file actually has data in it and isn't 0 bytes! (You can type `git restore data/raw/resume_dataset.csv` if you accidentally cleared it).
 - **File skipped because of "zlib / corrupted" error:** Sometimes downloaded PDFs are physically corrupted (zero text layer and compressed incorrectly). Open the file in an application like Mac's *Preview* app or a built-in PDF reader on Windows, select `Print` or `Export as PDF`, and save a fresh copy. Then the script will read it immediately.
