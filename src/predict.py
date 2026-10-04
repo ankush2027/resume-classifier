@@ -2,6 +2,10 @@ import pickle
 import re
 import os
 import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # PDF and DOCX support — accept real resume files in addition to pasted text
 try:
@@ -31,29 +35,6 @@ def section(title):
     print(f"\n{'─' * 50}")
     print(f"  {title}")
     print(f"{'─' * 50}")
-
-
-# text cleaning function
-def clean_resume(text):
-    # Remove URLs
-    text = re.sub(r'http\S+\s*', ' ', text)
-    # Remove email addresses (noise in real-world resumes)
-    text = re.sub(r'\S+@\S+\.\S+', ' ', text)
-    # Remove phone numbers (noise in real-world resumes)
-    text = re.sub(r'[\+\(]?[1-9][0-9 .\-\(\)]{8,}[0-9]', ' ', text)
-    # Remove retweet/cc artifacts
-    text = re.sub(r'\bRT\b|\bcc\b', ' ', text)
-    # Remove hashtags
-    text = re.sub(r'#\S+', '', text)
-    # Remove mentions
-    text = re.sub(r'@\S+', ' ', text)
-    # Remove non-ASCII characters
-    text = re.sub(r'[^\x00-\x7f]', ' ', text)
-    # Remove punctuation and special characters (keep letters/numbers)
-    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
-    # Collapse extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip().lower()
 
 
 # PDF-specific: clean up line-level noise from extraction
@@ -146,34 +127,20 @@ def keyword_predict(text):
     return best_cat, scores[best_cat]
 
 
-def hybrid_predict(raw_text, model, tfidf):
-    """
-    Hybrid prediction:
-    - ML model runs first
-    - If ML confidence >= threshold: use ML result
-    - If ML confidence < threshold: use keyword scoring as fallback
-    Returns: (category, confidence_pct, top3_list, method_used)
-    """
-    cleaned    = clean_resume(raw_text)
-    vector     = tfidf.transform([cleaned])
-    ml_pred    = model.predict(vector)[0]
-    confidence = 0.0
-    probs      = None
-    top3       = []
-
+def hybrid_predict(raw_text, model):
+    """Predict raw text; keyword overrides have no model probability attached."""
+    ml_pred = model.predict([raw_text])[0]
+    confidence, top3 = None, []
     if hasattr(model, "predict_proba"):
-        probs      = model.predict_proba(vector)[0]
-        confidence = max(probs) * 100
-        classes    = model.classes_
-        top3_idx   = probs.argsort()[-3:][::-1]
-        top3       = [(classes[i], probs[i] * 100) for i in top3_idx]
-
-    # Use keyword fallback when ML is not confident enough
-    if confidence < CONFIDENCE_THRESHOLD:
-        kw_pred, kw_score = keyword_predict(raw_text)
-        if kw_score >= 2:
-            return kw_pred, confidence, top3, "keyword"
-
+        probs = model.predict_proba([raw_text])[0]
+        confidence = float(max(probs) * 100)
+        indices = probs.argsort()[-3:][::-1]
+        top3 = [(model.classes_[i], float(probs[i] * 100)) for i in indices]
+        if confidence < CONFIDENCE_THRESHOLD:
+            kw_pred, kw_score = keyword_predict(raw_text)
+            if kw_score >= 2:
+                return kw_pred, None, [], "keyword"
+    # No probabilities (e.g. LinearSVC) is not evidence of low confidence.
     return ml_pred, confidence, top3, "ML"
 
 
@@ -215,13 +182,13 @@ def extract_docx(filepath):
 
 
 if __name__ == "__main__":
-    # load model + tfidf together
+    # Load the complete raw-text pipeline
     section("Resume Role Classifier")
     print("\n  Loading model...")
 
     try:
         with open("models/model.pkl", "rb") as f:
-            model, tfidf = pickle.load(f)
+            model = pickle.load(f)
         print("  ✓ Model loaded successfully")
     except FileNotFoundError:
         print("  ✗ ERROR: models/model.pkl not found. Run main.py first to train the model.")
@@ -292,13 +259,15 @@ if __name__ == "__main__":
             # Treat input as pasted resume text
             sample_resume = user_input
 
-        prediction, confidence, top3, method = hybrid_predict(sample_resume, model, tfidf)
+        prediction, confidence, top3, method = hybrid_predict(sample_resume, model)
 
         method_note = "  [keyword fallback — ML confidence was low]" if method == "keyword" else ""
 
         print(f"\n  ┌─ Predicted Category : {prediction}")
-        if confidence > 0:
+        if confidence is not None:
             print(f"  │  ML Confidence      : {confidence:.1f}%")
+        else:
+            print("  │  ML Confidence      : N/A")
         if method_note:
             print(f"  │  Note               :{method_note}")
         if top3:

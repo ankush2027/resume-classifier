@@ -10,7 +10,7 @@ Built to solve a real-world problem: companies receive resumes from multiple pla
 
 - **Multi-Format Extraction:** Automatically extracts text from `.pdf`, `.docx`, and `.txt`.
 - **Built-in OCR (Optical Character Recognition):** Can read scanned, photograph-based PDFs, `.jpg`, and `.png` image models via `Tesseract` and `pdf2image`.
-- **Hybrid AI Pipeline:** Uses a high-accuracy Machine Learning Model (Logistic Regression / TF-IDF) as the primary pipeline, but auto-falls back to a highly tuned **Domain Keyword System** if ML confidence is low on poorly formatted real-world resumes.
+- **Classification pipeline:** Uses TF-IDF with a classifier selected by training-only validation. Models with probabilities can use the existing keyword fallback below its threshold; LinearSVC returns an ML prediction with confidence shown as N/A. The keyword fallback is not part of the ML benchmark.
 - **Smart Folder Batching:** Drop 100 random files in a folder, run one script, and get 25 beautifully organized folders sorted by job category.
 
 ---
@@ -78,7 +78,7 @@ pip install -r requirements.txt
 *(Note: `requirements.txt` should include `pdfplumber`, `python-docx`, `pytesseract`, `pdf2image`, `pandas`, `scikit-learn`, `pillow`.)*
 
 ### 3. Train the Model 🧠
-You **must** run this first! It trains the AI on multiple models, compares their accuracy, and saves the perfect one (100% Accuracy on training).
+You **must** run this first! It compares three pipelines using training-only two-fold cross-validation, selects by macro-F1, then evaluates once on held-out resumes and saves the complete pipeline. Legacy 100% results were affected by duplicate and TF-IDF leakage and are not valid unseen-resume performance.
 ```bash
 python src/main.py   # Use python3 on Mac/Linux
 ```
@@ -114,3 +114,35 @@ This opens a browser with the full drag-and-drop web interface for batch resume 
 - **`File does not exist` / `Invalid value` error in Streamlit:** The model hasn't been trained yet. Run `python src/main.py` first to generate `models/model.pkl`, then re-run `streamlit run app.py`.
 - **`EmptyDataError` when running `main.py`:** Make sure your `data/raw/resume_dataset.csv` file actually has data in it and isn't 0 bytes! (You can type `git restore data/raw/resume_dataset.csv` if you accidentally cleared it).
 - **File skipped because of "zlib / corrupted" error:** Sometimes downloaded PDFs are physically corrupted (zero text layer and compressed incorrectly). Open the file in an application like Mac's *Preview* app or a built-in PDF reader on Windows, select `Print` or `Export as PDF`, and save a fresh copy. Then the script will read it immediately.
+
+
+## Stage 0 experiment
+
+Use Python 3.9.6 with the pinned ML dependencies. Run from the repository root:
+
+```bash
+python -m unittest discover -s tests -v
+python src/main.py
+```
+
+The raw CSV stays unchanged. Duplicate-key normalization is separate from model
+preprocessing. After deduplication, raw text is split 80/20 with seed 42 and category
+stratification. Each two-fold validation fit learns its own TF-IDF vocabulary.
+Selection uses mean macro-F1, then accuracy, then weighted-F1, then alphabetical
+model name. Only the selected pipeline is refitted on training data and evaluated
+on test; test data is never used for fitting or selection.
+
+`output/experiment_metadata.json` records dataset hash, original row indices for
+splits/folds, settings, versions and full metrics. `output/classification_report.txt`
+and `output/confusion_matrix.csv` describe the current experiment. Previous models
+and reports are archived under `output/legacy/` before replacement.
+
+`models/model.pkl` accepts raw strings and requires this repository's `src` package
+on the Python import path. Run consumers from the repository root as above. LinearSVC
+has no probabilities: confidence is displayed as N/A and this alone never triggers
+keyword fallback. Keyword overrides also display N/A and are outside the ML benchmark.
+
+There are few unique resumes per category; a small held-out result is preliminary.
+Exact/normalized duplicate separation does not establish independence of near-duplicate
+templates or prove real-world candidate performance. Tests repeat the fixed experiment
+only to verify reproducibility, not to tune against test results.

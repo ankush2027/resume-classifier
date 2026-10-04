@@ -1,45 +1,45 @@
-============================================================
-   Resume Classifier — Training Summary
-============================================================
+Validation results (training-only 2-fold CV)
+Naive Bayes: {"folds": [{"accuracy": 0.36363636363636365, "macro_f1": 0.2319047619047619, "weighted_f1": 0.28607503607503604}, {"accuracy": 0.30303030303030304, "macro_f1": 0.14494399520814613, "weighted_f1": 0.23459210251663082}], "mean": {"accuracy": 0.33333333333333337, "macro_f1": 0.188424378556454, "weighted_f1": 0.2603335692958334}}
+Logistic Regression: {"folds": [{"accuracy": 0.6666666666666666, "macro_f1": 0.5890196078431372, "weighted_f1": 0.62106357694593}, {"accuracy": 0.7424242424242424, "macro_f1": 0.7033131313131312, "weighted_f1": 0.7080501989592899}], "mean": {"accuracy": 0.7045454545454546, "macro_f1": 0.6461663695781342, "weighted_f1": 0.6645568879526099}}
+LinearSVC: {"folds": [{"accuracy": 0.8333333333333334, "macro_f1": 0.7516190476190476, "weighted_f1": 0.8015873015873015}, {"accuracy": 0.8484848484848485, "macro_f1": 0.7899624819624819, "weighted_f1": 0.8223555905374087}], "mean": {"accuracy": 0.8409090909090909, "macro_f1": 0.7707907647907648, "weighted_f1": 0.811971446062355}}
 
-Naive Bayes               Accuracy: 95.34%
-Logistic Regression       Accuracy: 100.00%
-LinearSVC                 Accuracy: 100.00%
-
-Best Model: Logistic Regression (100.00%)
-
-============================================================
-
-Classification Report (Logistic Regression):
-
+Selected model: LinearSVC
+Held-out test results
+{
+  "accuracy": 0.8823529411764706,
+  "macro_f1": 0.8209523809523809,
+  "weighted_f1": 0.8501400560224088
+}
                            precision    recall  f1-score   support
 
-                 Advocate       1.00      1.00      1.00         4
-                     Arts       1.00      1.00      1.00         7
-       Automation Testing       1.00      1.00      1.00         5
-               Blockchain       1.00      1.00      1.00         8
-         Business Analyst       1.00      1.00      1.00         6
-           Civil Engineer       1.00      1.00      1.00         5
-             Data Science       1.00      1.00      1.00         8
-                 Database       1.00      1.00      1.00         7
-          DevOps Engineer       1.00      1.00      1.00        11
-         DotNet Developer       1.00      1.00      1.00         5
-            ETL Developer       1.00      1.00      1.00         8
-   Electrical Engineering       1.00      1.00      1.00         6
-                       HR       1.00      1.00      1.00         9
-                   Hadoop       1.00      1.00      1.00         8
-       Health and fitness       1.00      1.00      1.00         6
-           Java Developer       1.00      1.00      1.00        17
-      Mechanical Engineer       1.00      1.00      1.00         8
-Network Security Engineer       1.00      1.00      1.00         5
-       Operations Manager       1.00      1.00      1.00         8
-                      PMO       1.00      1.00      1.00         6
-         Python Developer       1.00      1.00      1.00        10
-            SAP Developer       1.00      1.00      1.00         5
-                    Sales       1.00      1.00      1.00         8
-                  Testing       1.00      1.00      1.00        14
-            Web Designing       1.00      1.00      1.00         9
+                 Advocate       1.00      1.00      1.00         2
+                     Arts       1.00      1.00      1.00         1
+       Automation Testing       0.50      1.00      0.67         1
+               Blockchain       1.00      1.00      1.00         1
+         Business Analyst       0.50      1.00      0.67         1
+           Civil Engineer       1.00      1.00      1.00         1
+             Data Science       1.00      1.00      1.00         2
+                 Database       1.00      1.00      1.00         2
+          DevOps Engineer       1.00      1.00      1.00         1
+         DotNet Developer       1.00      1.00      1.00         2
+            ETL Developer       1.00      1.00      1.00         1
+   Electrical Engineering       1.00      1.00      1.00         1
+                       HR       1.00      1.00      1.00         2
+                   Hadoop       1.00      1.00      1.00         2
+       Health and fitness       1.00      1.00      1.00         1
+           Java Developer       0.75      1.00      0.86         3
+      Mechanical Engineer       0.00      0.00      0.00         1
+Network Security Engineer       1.00      1.00      1.00         1
+       Operations Manager       0.50      1.00      0.67         1
+                      PMO       0.00      0.00      0.00         1
+         Python Developer       1.00      1.00      1.00         1
+            SAP Developer       1.00      1.00      1.00         1
+                    Sales       1.00      1.00      1.00         1
+                  Testing       1.00      0.50      0.67         2
+            Web Designing       0.00      0.00      0.00         1
 
-                 accuracy                           1.00       193
-                macro avg       1.00      1.00      1.00       193
-             weighted avg       1.00      1.00      1.00       193
+                 accuracy                           0.88        34
+                macro avg       0.81      0.86      0.82        34
+             weighted avg       0.85      0.88      0.85        34
+
+Small test set: these results are preliminary, not evidence of broad generalization.

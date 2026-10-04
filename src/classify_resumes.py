@@ -3,6 +3,12 @@ import re
 import sys
 import pickle
 import pandas as pd
+from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.predict import hybrid_predict as predict_resume
 
 # PDF and DOCX support — handles real-world resume files from job portals/email
 try:
@@ -34,29 +40,6 @@ def section(title):
     print(f"{'─' * 50}")
 
 
-# text cleaning function
-def clean_resume(text):
-    # Remove URLs
-    text = re.sub(r'http\S+\s*', ' ', text)
-    # Remove email addresses (noise in real-world resumes)
-    text = re.sub(r'\S+@\S+\.\S+', ' ', text)
-    # Remove phone numbers (noise in real-world resumes)
-    text = re.sub(r'[\+\(]?[1-9][0-9 .\-\(\)]{8,}[0-9]', ' ', text)
-    # Remove retweet/cc artifacts
-    text = re.sub(r'\bRT\b|\bcc\b', ' ', text)
-    # Remove hashtags
-    text = re.sub(r'#\S+', '', text)
-    # Remove mentions
-    text = re.sub(r'@\S+', ' ', text)
-    # Remove non-ASCII characters
-    text = re.sub(r'[^\x00-\x7f]', ' ', text)
-    # Remove punctuation and special characters (keep letters/numbers)
-    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
-    # Collapse extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip().lower()
-
-
 # PDF-specific: clean up line-level noise from extraction
 def clean_pdf_text(text):
     lines = text.split('\n')
@@ -71,107 +54,10 @@ def clean_pdf_text(text):
     return ' '.join(cleaned)
 
 
-# Domain keyword dictionary for hybrid classification fallback
-# Used when ML model confidence is below threshold
-DOMAIN_KEYWORDS = {
-    "Data Science":             ["machine learning", "data science", "deep learning", "tensorflow",
-                                 "pytorch", "neural network", "nlp", "natural language", "computer vision",
-                                 "data analysis", "predictive", "sklearn", "scikit", "kaggle",
-                                 "statistics", "regression", "classification", "clustering", "feature engineering"],
-    "Java Developer":           ["java", "spring boot", "spring framework", "hibernate", "maven",
-                                 "gradle", "j2ee", "jsp", "servlet", "junit", "jvm", "microservices", "struts"],
-    "Python Developer":         ["python", "django", "flask", "fastapi", "pip", "virtualenv",
-                                 "celery", "pytest", "asyncio", "sqlalchemy", "pydantic"],
-    "DevOps Engineer":          ["devops", "docker", "kubernetes", "jenkins", "ci cd", "ansible",
-                                 "terraform", "aws", "azure", "gcp", "linux", "bash", "deployment pipeline",
-                                 "infrastructure as code", "helm"],
-    "Testing":                  ["manual testing", "test cases", "bug tracking", "quality assurance",
-                                 "qa", "test plan", "jira", "defect", "regression testing",
-                                 "black box", "white box", "uat"],
-    "Automation Testing":       ["selenium", "test automation", "robot framework", "testng",
-                                 "appium", "cypress", "playwright", "automated test"],
-    "Web Designing":            ["html", "css", "javascript", "react", "angular", "vue", "ui ux",
-                                 "figma", "photoshop", "responsive design", "bootstrap", "sass",
-                                 "frontend", "web design", "wordpress"],
-    "HR":                       ["human resources", "recruitment", "hiring", "onboarding", "payroll",
-                                 "employee relations", "talent acquisition", "performance management",
-                                 "hr policies", "staffing"],
-    "Hadoop":                   ["hadoop", "hdfs", "mapreduce", "hive", "pig", "spark", "big data",
-                                 "hbase", "yarn", "zookeeper", "kafka", "cloudera"],
-    "Blockchain":               ["blockchain", "ethereum", "solidity", "smart contract", "cryptocurrency",
-                                 "web3", "nft", "defi", "hyperledger", "bitcoin"],
-    "ETL Developer":            ["etl", "data warehouse", "informatica", "talend", "ssis",
-                                 "data pipeline", "data integration", "olap", "oltp", "pentaho"],
-    "Database":                 ["sql", "mysql", "postgresql", "mongodb", "oracle", "nosql",
-                                 "dba", "data modeling", "stored procedure", "database administration", "redis"],
-    "Operations Manager":       ["operations", "supply chain", "logistics", "process improvement",
-                                 "inventory management", "vendor management", "operations management"],
-    "Mechanical Engineer":      ["mechanical", "cad", "solidworks", "autocad", "manufacturing",
-                                 "production", "hvac", "thermodynamics", "fluid dynamics"],
-    "Electrical Engineering":   ["electrical", "circuit design", "pcb", "embedded systems", "plc",
-                                 "scada", "power systems", "vlsi", "microcontroller", "arduino"],
-    "Civil Engineer":           ["civil engineering", "construction", "structural", "surveying",
-                                 "concrete", "foundation", "site supervision", "estimation"],
-    "Sales":                    ["sales", "business development", "revenue", "client relationship",
-                                 "crm", "lead generation", "negotiation", "target achievement", "b2b"],
-    "SAP Developer":            ["sap", "abap", "s4hana", "sap hana", "sap mm", "sap sd",
-                                 "sap fi", "sap co", "sap basis", "fiori", "bapi"],
-    "Health and fitness":       ["health", "fitness", "nutrition", "physiotherapy", "gym",
-                                 "personal trainer", "wellness", "yoga", "sports", "rehabilitation"],
-    "PMO":                      ["pmo", "project management", "pmp", "agile", "scrum", "prince2",
-                                 "stakeholder management", "project planning", "risk management"],
-    "Arts":                     ["art", "design", "creative", "photography", "graphic design",
-                                 "illustration", "animation", "video editing", "content creation"],
-    "Business Analyst":         ["business analyst", "requirement gathering", "brd", "process mapping",
-                                 "use case", "wireframe", "gap analysis", "business requirements"],
-    "DotNet Developer":         [".net", "c#", "asp.net", "mvc", "entity framework", "visual studio",
-                                 "wcf", "blazor", "xamarin", "dotnet core"],
-    "Network Security Engineer":["network security", "firewall", "penetration testing", "ethical hacking",
-                                 "vulnerability assessment", "siem", "ssl", "vpn", "ids", "ips", "cybersecurity"],
-    "Advocate":                 ["advocate", "lawyer", "legal", "litigation", "court", "counsel",
-                                 "attorney", "bar council", "legal advice", "solicitor"],
-}
-
-# If ML confidence is below this %, use keyword scoring as fallback
-CONFIDENCE_THRESHOLD = 60.0
-
-
-def keyword_predict(text):
-    """Score text against domain keywords and return best matching category."""
-    text_lower = text.lower()
-    scores = {}
-    for domain, keywords in DOMAIN_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in text_lower)
-        scores[domain] = score
-    best_cat = max(scores, key=scores.get)
-    return best_cat, scores[best_cat]
-
-
-def hybrid_predict(raw_text, model, tfidf):
-    """
-    Hybrid prediction:
-    - ML model runs first
-    - If ML confidence >= threshold: use ML result
-    - If ML confidence < threshold: use keyword scoring as fallback
-    Returns: (category, confidence_pct, method_used)
-    """
-    cleaned = clean_resume(raw_text)
-    vector  = tfidf.transform([cleaned])
-
-    ml_pred    = model.predict(vector)[0]
-    confidence = 0.0
-
-    if hasattr(model, "predict_proba"):
-        probs      = model.predict_proba(vector)[0]
-        confidence = max(probs) * 100
-
-    # Use keyword fallback when ML is not confident enough
-    if confidence < CONFIDENCE_THRESHOLD:
-        kw_pred, kw_score = keyword_predict(raw_text)
-        if kw_score >= 2:   # at least 2 strong keyword matches
-            return kw_pred, confidence, "keyword"
-
-    return ml_pred, confidence, "ML"
+def hybrid_predict(raw_text, model):
+    """Keep the batch return shape while sharing single-resume inference."""
+    category, confidence, _, method = predict_resume(raw_text, model)
+    return category, confidence, method
 
 
 # Extract text from a PDF file
@@ -252,11 +138,11 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg"}
 if __name__ == "__main__":
     section("Resume Classification System — Batch Classify")
 
-    # load model and vectorizer
+    # Load the complete raw-text pipeline
     print("\n  Loading trained model...")
     try:
         with open("models/model.pkl", "rb") as f:
-            model, tfidf = pickle.load(f)
+            model = pickle.load(f)
         print("  ✓ Model loaded successfully")
     except FileNotFoundError:
         print("  ✗ ERROR: models/model.pkl not found. Run main.py first to train the model.")
@@ -293,9 +179,9 @@ if __name__ == "__main__":
                 skipped.append(filename)
                 continue
 
-            category, confidence, method = hybrid_predict(raw_text, model, tfidf)
+            category, confidence, method = hybrid_predict(raw_text, model)
 
-            conf_str   = f"{confidence:.1f}%" if confidence > 0 else "N/A"
+            conf_str   = f"{confidence:.1f}%" if confidence is not None else "N/A"
             method_str = f"[{method}]" if method == "keyword" else ""
             print(f"  ✓ {filename:<40} → {category:<30} {conf_str} {method_str}")
 
@@ -319,9 +205,9 @@ if __name__ == "__main__":
 
         for _, row in df_in.iterrows():
             raw_text = str(row.get("Resume", ""))
-            category, confidence, method = hybrid_predict(raw_text, model, tfidf)
+            category, confidence, method = hybrid_predict(raw_text, model)
 
-            conf_str   = f"{confidence:.1f}%" if confidence > 0 else "N/A"
+            conf_str   = f"{confidence:.1f}%" if confidence is not None else "N/A"
             method_str = f"[{method}]" if method == "keyword" else ""
             name = row.get("Name", "—")
             print(f"  ✓ {name:<20} → {category:<30} {conf_str} {method_str}")

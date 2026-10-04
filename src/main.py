@@ -1,39 +1,39 @@
-import pandas as pd
-import re
-import pickle
+"""Reproducible resume-category baseline; the test set never selects the model."""
+import hashlib
+import json
 import logging
-import os
-
+import pickle
+import platform
+import shutil
+import sys
 import unicodedata
+from datetime import datetime, timezone
+from importlib.metadata import version
+from pathlib import Path
 
-# Helper: pretty section header for terminal
+# Keep serialized preprocessing importable as src.preprocessing, including CLI use.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import pandas as pd
+from sklearn.base import clone
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
+from src.preprocessing import clean_resume
+
+SEED = 42
+TFIDF_CONFIG = dict(stop_words="english", sublinear_tf=True,
+                    ngram_range=(1, 2), min_df=2, max_features=50000)
+
+
 def section(title):
-    print(f"\n{'─' * 50}")
-    print(f"  {title}")
-    print(f"{'─' * 50}")
+    print(f"\n{'─' * 50}\n  {title}\n{'─' * 50}")
 
-
-# Text cleaning 
-def clean_resume(text):
-    # Remove URLs
-    text = re.sub(r'http\S+\s*', ' ', text)
-    # Remove email addresses (noise in real-world resumes)
-    text = re.sub(r'\S+@\S+\.\S+', ' ', text)
-    # Remove phone numbers (noise in real-world resumes)
-    text = re.sub(r'[\+\(]?[1-9][0-9 .\-\(\)]{8,}[0-9]', ' ', text)
-    # Remove retweet/cc artifacts
-    text = re.sub(r'\bRT\b|\bcc\b', ' ', text)
-    # Remove hashtags
-    text = re.sub(r'#\S+', '', text)
-    # Remove mentions
-    text = re.sub(r'@\S+', ' ', text)
-    # Remove non-ASCII characters
-    text = re.sub(r'[^\x00-\x7f]', ' ', text)
-    # Remove punctuation and special characters (keep letters/numbers)
-    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
-    # Collapse extra whitespace
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip().lower()
 
 def normalize_resume_key(text):
     """Normalize case, Unicode composition, and whitespace; preserve punctuation."""
@@ -89,202 +89,146 @@ def load_dataset(path="data/raw/resume_dataset.csv"):
     # Repeated resumes can otherwise appear in both training and test data.
     # Keep the first original row; never write back to the CSV, so the source
     # remains available for auditing and reproducing this decision.
-    return df.loc[~keys.duplicated(keep="first")].copy()
+    deduplicated = df.loc[~keys.duplicated(keep="first")].copy()
+    deduplicated.attrs["audit"] = statistics
+    return deduplicated
+
+
+def build_models():
+    """Fresh pipelines: every fit learns its own vocabulary and IDF weights."""
+    classifiers = {
+        "Naive Bayes": MultinomialNB(),
+        "Logistic Regression": LogisticRegression(C=5, solver="saga", max_iter=1000,
+                                                   random_state=SEED),
+        "LinearSVC": LinearSVC(C=1, max_iter=2000, random_state=SEED),
+    }
+    return {name: Pipeline([
+        ("tfidf", TfidfVectorizer(preprocessor=clean_resume, **TFIDF_CONFIG)),
+        ("classifier", classifier),
+    ]) for name, classifier in classifiers.items()}
+
+
+def split_dataset(df):
+    train, test = train_test_split(df, test_size=0.2, random_state=SEED,
+                                   stratify=df["Category"])
+    overlap = set(train.Resume.map(normalize_resume_key)) & set(test.Resume.map(normalize_resume_key))
+    if overlap:
+        raise ValueError("Duplicate-key overlap between training and test data.")
+    if set(train.Category) != set(df.Category) or set(test.Category) != set(df.Category):
+        raise ValueError("Split does not cover all categories; inspect class counts.")
+    if train.Category.value_counts().min() < 2:
+        raise ValueError("Two-fold validation requires at least two training rows per category.")
+    return train, test
+
+
+def metrics(y_true, y_pred):
+    return {
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "macro_f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "weighted_f1": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
+    }
+
+
+def run_experiment(dataset_path="data/raw/resume_dataset.csv"):
+    """Select on training folds, then make one held-out prediction per run."""
+    df = load_dataset(dataset_path)
+    train, test = split_dataset(df)
+    models = build_models()
+    cv = StratifiedKFold(n_splits=2, shuffle=True, random_state=SEED)
+    folds = list(cv.split(train.Resume, train.Category))
+    validation = {}
+    for name, pipeline in models.items():
+        results = []
+        for fit_indices, validation_indices in folds:
+            fit_rows, validation_rows = train.iloc[fit_indices], train.iloc[validation_indices]
+            fitted = clone(pipeline).fit(fit_rows.Resume, fit_rows.Category)
+            results.append(metrics(validation_rows.Category, fitted.predict(validation_rows.Resume)))
+        validation[name] = {"folds": results,
+                            "mean": {key: sum(row[key] for row in results) / len(results)
+                                     for key in results[0]}}
+
+    # Descending macro-F1, accuracy, weighted-F1; alphabetical name breaks exact ties.
+    selected = sorted(models, key=lambda name: (
+        -validation[name]["mean"]["macro_f1"],
+        -validation[name]["mean"]["accuracy"],
+        -validation[name]["mean"]["weighted_f1"], name))[0]
+    pipeline = clone(models[selected]).fit(train.Resume, train.Category)
+    predictions = pipeline.predict(test.Resume)
+    labels = sorted(df.Category.unique().tolist())
+    original_count = len(pd.read_csv(dataset_path))
+    metadata = {
+        "dataset_sha256": hashlib.sha256(Path(dataset_path).read_bytes()).hexdigest(),
+        "original_row_count": original_count, "deduplicated_row_count": len(df),
+        "duplicate_count": original_count - len(df), "category_count": len(labels),
+        "conflicting_duplicate_labels": df.attrs["audit"]["Conflicting duplicate labels"],
+        "train_count": len(train), "test_count": len(test), "duplicate_key_overlap": len(set(train.Resume.map(normalize_resume_key)) &
+                                     set(test.Resume.map(normalize_resume_key))),
+        "random_seed": SEED,
+        "split": {"test_size": 0.2, "stratify": "Category",
+                  "train_row_indices": train.index.tolist(), "test_row_indices": test.index.tolist(),
+                  "train_category_counts": train.Category.value_counts().to_dict(),
+                  "test_category_counts": test.Category.value_counts().to_dict()},
+        "cv": {"n_splits": 2, "shuffle": True, "random_state": SEED,
+               "fold_membership": [{"train_row_indices": train.iloc[a].index.tolist(),
+                                    "validation_row_indices": train.iloc[b].index.tolist()}
+                                   for a, b in folds]},
+        "tfidf_configuration": TFIDF_CONFIG,
+        "preprocessing": "src.preprocessing.clean_resume",
+        "classifier_configurations": {name: model.named_steps["classifier"].get_params()
+                                      for name, model in models.items()},
+        "selection_rule": "mean macro-F1, then accuracy, then weighted-F1, then alphabetical name",
+        "selected_model": selected, "validation_results": validation,
+        "held_out_test_metrics": metrics(test.Category, predictions),
+        "classification_report": classification_report(test.Category, predictions, labels=labels,
+                                                        output_dict=True, zero_division=0),
+        "confusion_matrix": confusion_matrix(test.Category, predictions, labels=labels).tolist(),
+        "confusion_matrix_labels": labels,
+        "python_version": platform.python_version(),
+        "package_versions": {name: version(name) for name in
+                             ["pandas", "numpy", "scipy", "scikit-learn", "joblib"]},
+    }
+    report = "Validation results (training-only 2-fold CV)\n"
+    for name, result in validation.items():
+        report += f"{name}: {json.dumps(result)}\n"
+    report += f"\nSelected model: {selected}\nHeld-out test results\n"
+    report += json.dumps(metadata["held_out_test_metrics"], indent=2) + "\n"
+    report += classification_report(test.Category, predictions, labels=labels, zero_division=0)
+    report += "\nSmall test set: these results are preliminary, not evidence of broad generalization.\n"
+    return pipeline, metadata, report
+
+
+def save_results(pipeline, metadata, report):
+    """Archive previous artifacts before replacing them; never retrain on test."""
+    Path("models").mkdir(exist_ok=True)
+    Path("output").mkdir(exist_ok=True)
+    previous = list(Path("models").glob("*.pkl"))
+    previous += list(Path("output").glob("classification_report*.txt"))
+    previous += list(Path("output").glob("confusion_matrix*.txt"))
+    previous += list(Path("output").glob("confusion_matrix*.csv"))
+    previous += list(Path("output").glob("experiment_metadata.json"))
+    if previous:
+        archive = Path("output/legacy") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        archive.mkdir(parents=True)
+        (archive / "README.txt").write_text(
+            "Archived previous artifacts. Pre-Stage-0 results may contain leakage and must not "
+            "be presented as valid unseen-resume performance. See current experiment_metadata.json.\n")
+        for path in previous:
+            destination = archive / path.parent.name / path.name
+            destination.parent.mkdir(exist_ok=True)
+            shutil.move(str(path), destination)
+    with Path("models/model.pkl").open("wb") as stream:
+        pickle.dump(pipeline, stream)
+    Path("output/experiment_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    Path("output/classification_report.txt").write_text(report)
+    pd.DataFrame(metadata["confusion_matrix"], index=metadata["confusion_matrix_labels"],
+                 columns=metadata["confusion_matrix_labels"]).to_csv("output/confusion_matrix.csv")
 
 
 def main():
-    # Setup logging 
-    os.makedirs("output", exist_ok=True)
-
-    logging.basicConfig(
-        filename="output/project.log",
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-
-    logging.info("Training started")
-
-
-    section("Resume Classification System — Training")
-
-    df = load_dataset()
-    logging.info("Dataset loaded and deduplicated successfully")
-    section("Deduplicated Category Distribution")
-    print(df['Category'].value_counts().to_string())
-
-    df['cleaned_resume'] = df['Resume'].apply(clean_resume)
-
-    logging.info("Text cleaning completed")
-
-
-    # TF-IDF 
-    from sklearn.feature_extraction.text import TfidfVectorizer
-
-    # Improved TF-IDF: sublinear_tf reduces impact of very frequent terms;
-    # ngram_range captures bigrams for richer features; min_df filters rare noise
-    tfidf = TfidfVectorizer(
-        stop_words='english',
-        sublinear_tf=True,
-        ngram_range=(1, 2),
-        min_df=2,
-        max_features=50000
-    )
-
-    X = tfidf.fit_transform(df['cleaned_resume'])
-    y = df['Category']
-
-    section("TF-IDF Vectorization")
-    print(f"  Feature matrix shape : {X.shape}")
-    print(f"  Vocabulary size      : {len(tfidf.vocabulary_)}")
-    print(f"  Classes              : {y.nunique()}")
-
-    logging.info("TF-IDF vectorization completed")
-
-
-    # Train-test split
-    # stratify=y ensures each class is proportionally represented in both splits
-    from sklearn.model_selection import train_test_split
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    logging.info("Train-test split completed")
-
-
-    # Evaluation helpers
-    from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-    import numpy as np
-
-    def print_model_results(name, y_true, y_pred):
-        """Print a clean summary for a given model's predictions."""
-        acc = accuracy_score(y_true, y_pred)
-        report = classification_report(y_true, y_pred)
-        section(f"{name} — Results")
-        print(f"  Accuracy : {acc * 100:.2f}%")
-        print(f"\nClassification Report:\n{report}")
-        return acc, report
-
-
-    def save_confusion_matrix(name, y_true, y_pred, labels):
-        """Save confusion matrix as a plain-text grid to output folder."""
-        cm = confusion_matrix(y_true, y_pred, labels=labels)
-        filepath = os.path.join("output", f"confusion_matrix_{name.replace(' ', '_')}.txt")
-        with open(filepath, "w") as f:
-            f.write(f"Confusion Matrix — {name}\n")
-            f.write(f"{'':35s}" + "  ".join(f"{l[:6]:>6}" for l in labels) + "\n")
-            for i, row in enumerate(cm):
-                f.write(f"{labels[i][:35]:35s}" + "  ".join(f"{v:>6}" for v in row) + "\n")
-        print(f"  Confusion matrix saved → {filepath}")
-
-
-    # Naive Bayes
-    from sklearn.naive_bayes import MultinomialNB
-
-    nb_model = MultinomialNB()
-    nb_model.fit(X_train, y_train)
-
-    nb_pred = nb_model.predict(X_test)
-    nb_accuracy, nb_report = print_model_results("Naive Bayes", y_test, nb_pred)
-
-    # Save NB report
-    with open("output/classification_report_nb.txt", "w") as f:
-        f.write("Naive Bayes Accuracy: " + str(nb_accuracy) + "\n\n")
-        f.write(nb_report)
-
-    save_confusion_matrix("Naive_Bayes", y_test, nb_pred, sorted(y.unique()))
-
-    logging.info("Naive Bayes model trained and evaluated")
-
-
-    # Logistic Regression 
-    from sklearn.linear_model import LogisticRegression
-
-    # C=5 gives slightly less regularization; saga solver scales better with large vocab
-    lr_model = LogisticRegression(max_iter=1000, C=5, solver='saga', n_jobs=-1)
-    lr_model.fit(X_train, y_train)
-
-    lr_pred = lr_model.predict(X_test)
-    lr_accuracy, lr_report = print_model_results("Logistic Regression", y_test, lr_pred)
-
-    save_confusion_matrix("Logistic_Regression", y_test, lr_pred, sorted(y.unique()))
-
-    logging.info("Logistic Regression model trained")
-
-
-    # LinearSVC (often best for high-dimensional text classification)
-    from sklearn.svm import LinearSVC
-    from sklearn.calibration import CalibratedClassifierCV
-
-    # Wrap in CalibratedClassifierCV so we can get probability estimates later
-    svc_base = LinearSVC(max_iter=2000, C=1.0)
-    svc_model = CalibratedClassifierCV(svc_base)
-    svc_model.fit(X_train, y_train)
-
-    svc_pred = svc_model.predict(X_test)
-    svc_accuracy, svc_report = print_model_results("LinearSVC", y_test, svc_pred)
-
-    save_confusion_matrix("LinearSVC", y_test, svc_pred, sorted(y.unique()))
-
-    logging.info("LinearSVC model trained and evaluated")
-
-
-    # Pick the best model to save
-    scores = {
-        "Naive Bayes": (nb_accuracy, nb_model),
-        "Logistic Regression": (lr_accuracy, lr_model),
-        "LinearSVC": (svc_accuracy, svc_model),
-    }
-
-    best_name, (best_acc, best_model) = max(scores.items(), key=lambda kv: kv[1][0])
-
-    section("Model Comparison")
-    for name, (acc, _) in scores.items():
-        marker = "  ◀ best" if name == best_name else ""
-        print(f"  {name:<25} {acc * 100:.2f}%{marker}")
-
-    print(f"\n  Saving best model: {best_name}")
-
-    # Save model
-    os.makedirs("models", exist_ok=True)
-
-    # Always save Naive Bayes (original behaviour preserved) — keep model.pkl as best model
-    with open("models/model.pkl", "wb") as f:
-        pickle.dump((best_model, tfidf), f)
-
-    # Also save all models for reference
-    with open("models/nb_model.pkl", "wb") as f:
-        pickle.dump((nb_model, tfidf), f)
-
-    with open("models/lr_model.pkl", "wb") as f:
-        pickle.dump((lr_model, tfidf), f)
-
-    with open("models/svc_model.pkl", "wb") as f:
-        pickle.dump((svc_model, tfidf), f)
-
-    # Save a consolidated summary report
-    with open("output/classification_report.txt", "w") as f:
-        f.write("=" * 60 + "\n")
-        f.write("   Resume Classifier — Training Summary\n")
-        f.write("=" * 60 + "\n\n")
-        for name, (acc, _) in scores.items():
-            f.write(f"{name:<25} Accuracy: {acc * 100:.2f}%\n")
-        f.write(f"\nBest Model: {best_name} ({best_acc * 100:.2f}%)\n")
-        f.write("\n" + "=" * 60 + "\n")
-        f.write(f"\nClassification Report ({best_name}):\n\n")
-        f.write(nb_report if best_name == "Naive Bayes" else
-                lr_report if best_name == "Logistic Regression" else svc_report)
-
-    print("\n  All models and reports saved successfully.")
-
-    logging.info(f"Best model ({best_name}) and TF-IDF saved successfully")
-    logging.info("Training completed")
-
-    section("Training Complete")
-    print(f"  Best model  : {best_name}")
-    print(f"  Accuracy    : {best_acc * 100:.2f}%")
-    print(f"  Model saved → models/model.pkl")
-    print(f"  Reports     → output/\n")
+    pipeline, metadata, report = run_experiment()
+    save_results(pipeline, metadata, report)
+    print(report)
+    print("Saved complete raw-text pipeline to models/model.pkl")
 
 
 if __name__ == "__main__":

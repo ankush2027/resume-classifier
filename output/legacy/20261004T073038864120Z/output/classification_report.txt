@@ -1,0 +1,45 @@
+============================================================
+   Resume Classifier — Training Summary
+============================================================
+
+Naive Bayes               Accuracy: 95.34%
+Logistic Regression       Accuracy: 100.00%
+LinearSVC                 Accuracy: 100.00%
+
+Best Model: Logistic Regression (100.00%)
+
+============================================================
+
+Classification Report (Logistic Regression):
+
+                           precision    recall  f1-score   support
+
+                 Advocate       1.00      1.00      1.00         4
+                     Arts       1.00      1.00      1.00         7
+       Automation Testing       1.00      1.00      1.00         5
+               Blockchain       1.00      1.00      1.00         8
+         Business Analyst       1.00      1.00      1.00         6
+           Civil Engineer       1.00      1.00      1.00         5
+             Data Science       1.00      1.00      1.00         8
+                 Database       1.00      1.00      1.00         7
+          DevOps Engineer       1.00      1.00      1.00        11
+         DotNet Developer       1.00      1.00      1.00         5
+            ETL Developer       1.00      1.00      1.00         8
+   Electrical Engineering       1.00      1.00      1.00         6
+                       HR       1.00      1.00      1.00         9
+                   Hadoop       1.00      1.00      1.00         8
+       Health and fitness       1.00      1.00      1.00         6
+           Java Developer       1.00      1.00      1.00        17
+      Mechanical Engineer       1.00      1.00      1.00         8
+Network Security Engineer       1.00      1.00      1.00         5
+       Operations Manager       1.00      1.00      1.00         8
+                      PMO       1.00      1.00      1.00         6
+         Python Developer       1.00      1.00      1.00        10
+            SAP Developer       1.00      1.00      1.00         5
+                    Sales       1.00      1.00      1.00         8
+                  Testing       1.00      1.00      1.00        14
+            Web Designing       1.00      1.00      1.00         9
+
+                 accuracy                           1.00       193
+                macro avg       1.00      1.00      1.00       193
+             weighted avg       1.00      1.00      1.00       193

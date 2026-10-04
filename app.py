@@ -58,23 +58,23 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load the model and vectorizer
+# Load the complete raw-text pipeline
 @st.cache_resource
 def load_classification_model():
     model_path = os.path.join("models", "model.pkl")
     if not os.path.exists(model_path):
-        return None, None
+        return None
     with open(model_path, "rb") as f:
-        m, v = pickle.load(f)
-    return m, v
+        model = pickle.load(f)
+    return model
 
-model, tfidf = load_classification_model()
+model = load_classification_model()
 
 # Header
 st.markdown('<div class="main-header">Resume Classifier AI</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Upload resumes (PDF, DOCX, TXT) and instantly predict their job category using Hybrid Machine Learning.</div>', unsafe_allow_html=True)
 
-if model is None or tfidf is None:
+if model is None:
     st.error("Model not found! Please ensure you have trained the model using `python src/main.py` and that `models/model.pkl` exists.")
     st.stop()
 
@@ -123,11 +123,11 @@ if st.button("Classify Resumes"):
                 skipped.append(uploaded_file.name)
             else:
                 # Prediction
-                prediction, confidence, top3, method = hybrid_predict(raw_text, model, tfidf)
+                prediction, confidence, top3, method = hybrid_predict(raw_text, model)
                 results.append({
                     "Filename": uploaded_file.name,
                     "Predicted Category": prediction,
-                    "Confidence": f"{confidence:.1f}%",
+                    "Confidence": f"{confidence:.1f}%" if confidence is not None else "N/A",
                     "Method": method
                 })
 

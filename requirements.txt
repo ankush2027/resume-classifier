@@ -1,9 +1,9 @@
 # Core ML & Data
-pandas>=2.0.0
-scikit-learn
-scipy>=1.10.0
-numpy>=1.22.0
-joblib
+pandas==2.3.3
+scikit-learn==1.6.1
+scipy==1.13.1
+numpy==2.0.2
+joblib==1.5.3
 
 # Resume File Parsing (PDF and Word documents)
 pdfplumber
