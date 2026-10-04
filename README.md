@@ -205,3 +205,68 @@ This is a first deterministic parser, not perfect NLP: unusual layouts, DOCX tab
 columns, unlabeled contact data and entries without clear boundaries can remain
 partially parsed. Bullet-only projects keep their descriptions with an unavailable
 name. There is no job matching, ranking, database, REST API or recruiter workflow.
+
+## Stage 2: Job intelligence foundation
+
+`Job Description → JobProfile` is available locally through:
+
+```python
+from src.job_intelligence import parse_job_description
+profile = parse_job_description("Required Skills: Python, Postgres\nPreferred Skills: Docker")
+print(profile.to_dict())
+```
+
+The dataclass contains title, required/preferred skills, responsibilities, education
+and experience requirements, canonical technical keywords, and unchanged raw text.
+It reuses Stage 1's skills taxonomy and aliases. Explicit wording overrides section
+context; ambiguous qualifications, mixed clauses, alternatives and conflicting
+skill statuses are not promoted to mandatory requirements. Unclassified technical
+mentions remain in `keywords`, which does not imply a requirement. Education and
+experience strings retain their original wording, including preference qualifiers.
+Missing fields stay null/empty. This conservative first version expects recognizable
+headings or explicit requirement wording and can leave unusual prose unclassified.
+There is no UI change; candidate matching, scoring and ranking belong to future stages.
+
+## Stage 3: Single-candidate rule-based matching
+
+```python
+from src.matching import match_candidate_to_job
+result = match_candidate_to_job(candidate_profile, job_profile)
+print(result.to_dict())
+```
+
+Matching uses canonical exact skills and only aliases already present in Stage 1's
+shared taxonomy. Unlisted skill labels require exact case-insensitive equality;
+related skills are not substitutes. Missing skills mean **not found in the profile**,
+not proven absent. Matched evidence is copied only from existing candidate evidence.
+
+The result includes matched/missing required and preferred skills, their ratios,
+experience/education states, an explanation, evidence, score and assessed-weight
+coverage. States are `satisfied`, `not_satisfied`, `unknown`, or `not_required`.
+Zero requested skills yield a null ratio, not a perfect or failed match.
+
+The **rule-based match score** is 0–100: required skills 70%, preferred skills 15%,
+experience 10%, education 5%. Ratios provide skill component values; satisfied is 1
+and not_satisfied is 0. Unknown and unspecified components are excluded and remaining
+weights are renormalized. With no assessable components the score is null. Coverage
+reports the sum of included original weights; 100 points with low coverage does not
+mean every requirement was verified. Scores are not AI predictions or hiring decisions.
+
+Experience checks only one obvious years threshold. An explicit duration at the
+start of an experience description (e.g. `3 years Software Engineer`) or closed date
+intervals can support it. Overlapping dates are merged; separate duration claims are
+never summed. Partial dates use conservative bounds; `Present` is unknown rather than
+consulting today's date. Skill-specific tenure, alternatives and optional/ambiguous
+requirements remain unknown. Satisfaction establishes duration only, not backend or
+other role/domain relevance. Insufficient date evidence stays unknown; a single explicit
+duration below the threshold is marked not_satisfied.
+
+Education supports a small set of degree-family equivalents (e.g. B.Tech and
+Bachelor's) and exact stated field names. Higher degrees are not automatically
+substituted. Missing/nonmatching evidence stays unknown; completion and accreditation
+are not verified. Original profiles and ML classification behavior are unchanged.
+
+Example: 3/3 required skills, 1/2 preferred skills, satisfied experience and education
+produce `70 + 7.5 + 10 + 5 = 92.5`. If experience and education are unknown, that same
+skill overlap scores `(70 + 7.5) / 0.85 = 91.18`, with 85% coverage. No multiple-candidate
+ranking, comparison, UI, API, or Stage 4 evidence intelligence is included.
