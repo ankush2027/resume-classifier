@@ -3,6 +3,7 @@ import pandas as pd
 import pickle
 import os
 import sys
+import hashlib
 
 # Configure Streamlit page for a modern look
 st.set_page_config(
@@ -19,6 +20,7 @@ from src.document_extraction import DocumentExtractionError, classification_text
 from src.resume_intelligence import parse_resume_file
 from src.job_intelligence import parse_job_description
 from src.evidence import assess_candidate
+from src.ranking import CandidateFilters, rank_candidates, filter_candidates
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -82,6 +84,11 @@ uploaded_files = st.file_uploader("Select PDF, DOCX, or TXT files", type=["pdf",
 
 job_description = st.text_area("Job description (optional, for evidence assessment)")
 
+# Cache evaluated inputs across widget reruns. Changed inputs require evaluation again.
+batch_key = (job_description, tuple(
+    (upload.name, hashlib.sha256(upload.getbuffer()).hexdigest())
+    for upload in (uploaded_files or [])))
+
 if st.button("Classify Resumes"):
     if not uploaded_files:
         st.warning("Please upload at least one resume file.")
@@ -91,7 +98,7 @@ if st.button("Classify Resumes"):
         profiles = []
 
         my_bar = st.progress(0)
-        
+
         for i, uploaded_file in enumerate(uploaded_files):
             # Isolate uploads so filenames cannot overwrite existing project files.
             with TemporaryDirectory(prefix="resume-upload-") as directory:
@@ -119,65 +126,120 @@ if st.button("Classify Resumes"):
 
             # Update Progress Bar
             my_bar.progress((i + 1) / len(uploaded_files))
-            
-        st.success("Classification Complete!")
-        
-        # Display Skipped files
-        if skipped:
-            st.warning(f"⚠️ Skipped {len(skipped)} files due to unreadable content or image-based PDFs without OCR fallback.")
-            with st.expander("Show skipped files"):
-                for s in skipped:
-                    st.write(f"- {s}")
 
-        # Display Results
-        if results:
-            df_results = pd.DataFrame(results)
-            
-            st.markdown("### Classification Results")
-            st.dataframe(df_results, use_container_width=True)
+        job = parse_job_description(job_description) if job_description.strip() else None
+        assessments = [assess_candidate(profile, job) for _, profile in profiles] if job else []
+        st.session_state["evaluated_batch"] = {
+            "key": batch_key, "results": results, "skipped": skipped,
+            "profiles": profiles, "assessments": assessments,
+            "ranking": rank_candidates(assessments, candidate_profiles=[p for _, p in profiles]) if job else None,
+        }
 
-            for filename, profile in profiles:
-                with st.expander(f"Candidate Information — {filename}"):
-                    st.write({"Name": profile.candidate_name, "Email": profile.email,
-                              "Phone": profile.phone, "Location": profile.location})
-                    st.write("Skills", profile.skills)
-                    # JSON keeps nullable fields, source text and evidence inspectable.
-                    st.json(profile.to_dict())
+batch = st.session_state.get("evaluated_batch")
+if batch and batch["key"] != batch_key:
+    st.info("Inputs changed. Click Classify Resumes to evaluate this batch.")
+if batch and batch["key"] == batch_key:
+    results, skipped, profiles = batch["results"], batch["skipped"], batch["profiles"]
+    st.success("Classification Complete!")
 
-                if job_description.strip():
-                    assessment = assess_candidate(profile, parse_job_description(job_description))
-                    with st.expander(f"Evidence assessment — {filename}"):
-                        st.write({"Rule-based match score": assessment.overall_match_score,
-                                  "Evidence-adjusted match score": assessment.evidence_adjusted_match_score,
-                                  "Assessed weight coverage": assessment.score_coverage})
-                        for group, requirements in [("Required", assessment.required_requirements),
-                                                     ("Preferred", assessment.preferred_requirements)]:
-                            st.write(group + " skills")
-                            for requirement in requirements:
-                                st.write(requirement.explanation)
-                                for evidence in requirement.evidence:
-                                    st.caption(f"{evidence.source_type} · {evidence.strength} · {evidence.relevance}")
-                                    st.text(evidence.source_text)
-                        st.write("Verify", assessment.concerns)
-                        st.caption(assessment.explanation)
+    # Display Skipped files
+    if skipped:
+        st.warning(f"⚠️ Skipped {len(skipped)} files due to unreadable content or image-based PDFs without OCR fallback.")
+        with st.expander("Show skipped files"):
+            for s in skipped:
+                st.write(f"- {s}")
+
+    # Display Results
+    if results:
+        df_results = pd.DataFrame(results)
+
+        st.markdown("### Classification Results")
+        st.dataframe(df_results, use_container_width=True)
+
+        for profile_index, (filename, profile) in enumerate(profiles):
+            with st.expander(f"Candidate Information — {filename}"):
+                st.write({"Name": profile.candidate_name, "Email": profile.email,
+                          "Phone": profile.phone, "Location": profile.location})
+                st.write("Skills", profile.skills)
+                # JSON keeps nullable fields, source text and evidence inspectable.
+                st.json(profile.to_dict())
+
+            if job_description.strip():
+                assessment = batch["assessments"][profile_index]
+                with st.expander(f"Evidence assessment — {filename}"):
+                    st.write({"Rule-based match score": assessment.overall_match_score,
+                              "Evidence-adjusted match score": assessment.evidence_adjusted_match_score,
+                              "Assessed weight coverage": assessment.score_coverage})
+                    for group, requirements in [("Required", assessment.required_requirements),
+                                                 ("Preferred", assessment.preferred_requirements)]:
+                        st.write(group + " skills")
+                        for requirement in requirements:
+                            st.write(requirement.explanation)
+                            for evidence in requirement.evidence:
+                                st.caption(f"{evidence.source_type} · {evidence.strength} · {evidence.relevance}")
+                                st.text(evidence.source_text)
+                    st.write("Verify", assessment.concerns)
+                    st.caption(assessment.explanation)
 
 
-            
-            # Grouping visually
-            st.markdown("### Job Category Breakdown")
-            category_counts = df_results["Predicted Category"].value_counts().reset_index()
-            category_counts.columns = ["Category", "Count"]
-            
-            cols = st.columns(3)
-            for idx, row in category_counts.iterrows():
-                with cols[idx % 3]:
-                    st.metric(label=row["Category"], value=f"{row['Count']} Resumes")
 
-            st.markdown("### Download Results")
-            csv = df_results.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download CSV Report",
-                data=csv,
-                file_name='resume_classification_results.csv',
-                mime='text/csv',
-            )
+        # Grouping visually
+        st.markdown("### Job Category Breakdown")
+        category_counts = df_results["Predicted Category"].value_counts().reset_index()
+        category_counts.columns = ["Category", "Count"]
+
+        cols = st.columns(3)
+        for idx, row in category_counts.iterrows():
+            with cols[idx % 3]:
+                st.metric(label=row["Category"], value=f"{row['Count']} Resumes")
+
+        st.markdown("### Download Results")
+        csv = df_results.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download CSV Report",
+            data=csv,
+            file_name='resume_classification_results.csv',
+            mime='text/csv',
+        )
+
+    if batch["ranking"] is not None:
+        st.markdown("### Evidence-aware ranking")
+        st.caption("Decision support for recruiter review. Scores reflect resume information, not verified claims.")
+        ranking = batch["ranking"]
+        skills = sorted({skill for candidate in ranking.ranked_candidates
+                         for skill in (candidate.assessment.match_result.candidate_skills +
+                                       [r.requirement for r in candidate.assessment.required_requirements +
+                                        candidate.assessment.preferred_requirements])})
+        with st.expander("Ranking filters"):
+            minimum_score = st.number_input("Minimum evidence-adjusted score", min_value=0.0, max_value=100.0, value=None)
+            minimum_coverage = st.number_input("Minimum required-skill coverage (0–1)", min_value=0.0, max_value=1.0, value=None)
+            selected_skills = st.multiselect("Require direct skills", skills)
+            statuses = ["Any", "satisfied", "not_satisfied", "unknown", "not_required"]
+            experience = st.selectbox("Experience status", statuses)
+            education = st.selectbox("Education status", statuses)
+            strength = st.selectbox("Minimum evidence strength", ["Any", "weak", "moderate", "strong"])
+            st.caption("Strength applies to every selected skill; otherwise every required job skill, or preferred skills when none are required.")
+        filtered = filter_candidates(ranking, CandidateFilters(
+            minimum_score=minimum_score, minimum_required_skill_coverage=minimum_coverage,
+            required_skills=selected_skills,
+            experience_status=None if experience == "Any" else experience,
+            education_status=None if education == "Any" else education,
+            minimum_evidence_strength=None if strength == "Any" else strength))
+        st.write(f"{len(filtered.filtered_candidates)} of {len(ranking.ranked_candidates)} candidates meet the filters.")
+        rows = [{"Rank": c.rank, "Candidate": c.candidate_name or c.candidate_id,
+                 "Match": c.ranking_score, "Score coverage": c.score_coverage,
+                 "Required skill coverage": c.required_skill_coverage,
+                 "Evidence": str(c.evidence_strength_summary)} for c in filtered.filtered_candidates]
+        st.dataframe(pd.DataFrame(rows, columns=["Rank", "Candidate", "Match", "Score coverage",
+                                                "Required skill coverage", "Evidence"]), use_container_width=True)
+        for candidate in filtered.filtered_candidates:
+            with st.expander(f"Rank #{candidate.rank} — {candidate.candidate_name or 'Unnamed candidate'}"):
+                st.caption(candidate.candidate_id)
+                st.write(candidate.ranking_explanation)
+                st.write("Strengths", candidate.strengths)
+                st.write("Concerns", candidate.concerns)
+                st.write("Required", {r.requirement: r.status for r in candidate.assessment.required_requirements})
+                st.write("Preferred", {r.requirement: r.status for r in candidate.assessment.preferred_requirements})
+        with st.expander("Filter exclusions"):
+            for excluded in filtered.excluded_candidates:
+                st.write(excluded.candidate.candidate_name or excluded.candidate.candidate_id, excluded.reasons)

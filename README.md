@@ -268,8 +268,7 @@ are not verified. Original profiles and ML classification behavior are unchanged
 
 Example: 3/3 required skills, 1/2 preferred skills, satisfied experience and education
 produce `70 + 7.5 + 10 + 5 = 92.5`. If experience and education are unknown, that same
-skill overlap scores `(70 + 7.5) / 0.85 = 91.18`, with 85% coverage. No multiple-candidate
-ranking, comparison, UI, API, or Stage 4 evidence intelligence is included.
+skill overlap scores `(70 + 7.5) / 0.85 = 91.18`, with 85% coverage. Stage 3 itself only evaluates one candidate; subsequent stages consume its result.
 
 ## Stage 4: Evidence-based candidate intelligence
 
@@ -342,5 +341,74 @@ project-backed skill score 92.5. This tests the rules, not differences in real c
 
 Streamlit has an optional job-description text field and a per-resume evidence expander
 with both scores, explanations, concerns and verbatim snippets. Existing classification
-and profile views remain available. There is no ranking, comparison, recruiter workflow,
-new API service, external service or Stage 5 functionality.
+and profile views remain available. Stage 5 adds batch ranking and filters below these views; no new API or external service is involved.
+
+
+## Stage 5: Evidence-aware ranking and filtering
+
+```text
+CandidateAssessment[] → Ranking + Filtering → Ranked Candidates → Recruiter Review
+```
+
+```python
+from src.ranking import CandidateFilters, rank_candidates, filter_candidates
+
+# Assessments must concern the same job; profiles are optional identity inputs only.
+ranked = rank_candidates(assessments, candidate_profiles=profiles)
+shortlist = filter_candidates(ranked, CandidateFilters(
+    minimum_score=70, minimum_required_skill_coverage=0.75,
+    required_skills=["Python"], minimum_evidence_strength="moderate"))
+for candidate in shortlist.filtered_candidates:
+    print(candidate.rank, candidate.candidate_name, candidate.ranking_explanation)
+for excluded in shortlist.excluded_candidates:
+    print(excluded.candidate.candidate_name, excluded.reasons)
+```
+
+Ordering is lexicographic: descending **unchanged Stage 4 evidence-adjusted score**,
+then direct required-skill coverage, Stage 4 assessed weight coverage, mean strongest
+direct evidence credit per unique requested skill (the existing 0.3/0.7/1.0 labels),
+then ascending stable identifier. Secondary signals only break ties, never add points.
+Repeated evidence records, keywords and unrelated skills add no strength credit.
+Unavailable scores sort below known zero scores and remain unavailable. Weight coverage
+includes unspecified/unknown components excluded from evaluation; low coverage is not
+proof of inability. Required coverage counts direct matches, including weak mentions,
+so it must be read alongside evidence strength. Missing, unknown and transferable states
+remain separate. Transferable evidence never becomes a direct match.
+
+Filters support minimum score (0–100), minimum required coverage (0–1), selected
+canonical skills (existing aliases), experience and education statuses (`satisfied`,
+`not_satisfied`, `unknown`, `not_required`), and minimum evidence strength
+(`weak`, `moderate`, `strong`). Every selected skill must match directly; for a skill
+not assessed by Stage 4, the existing Stage 3 canonical candidate skill list can establish
+presence only. It cannot establish evidence strength. A strength filter applies to
+**every selected skill**, otherwise every required job skill, falling back to preferred
+skills when there are no required skills. No assessed skills means strength is unknown
+and cannot pass an explicit threshold. Jobs with no required skills have `None` coverage
+and pass the coverage filter as not applicable; incomplete required assessments fail
+an explicit coverage threshold. Unknown scores fail even an explicit minimum of zero.
+
+`RankingResult` retains all candidates, the full ranked list, included candidates,
+excluded candidates with reasons, and a filter summary. Filtering starts from the full
+ranked batch, does not mutate the input, and preserves original rank numbers. Ranked
+views retain the original assessment, strengths, concerns, requirement states and evidence.
+
+IDs hash profile content, including normalized email when available, without displaying
+contact details. They identify submissions, not verified people; changing profile content
+can change the ID. Without profiles the assessment hash is evaluation-specific. Identical
+submissions are retained with stable occurrence suffixes and an explicit duplicate count;
+they are interchangeable, never silently merged. These hashes are not an anonymization
+or identity-verification system. The caller must supply assessments for one job: the
+existing assessment model does not contain a job identity that Stage 5 can validate.
+
+Streamlit retains evaluated uploads during filter reruns, displays a compact ranked table,
+requirement states, explanations and exclusion reasons, and preserves classification,
+profile and evidence views. Changing the job or uploads requires clicking Classify Resumes
+again. Ranking is decision support, not autonomous hiring or a prediction of job performance;
+all evidence remains rule-based information in resumes, not verified claims.
+
+Run all regression tests (pytest is a development-only tool):
+
+```bash
+python -m pip install pytest==8.4.2
+python -m pytest -q
+```
