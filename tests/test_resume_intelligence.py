@@ -237,6 +237,7 @@ class IntegrationTests(unittest.TestCase):
         with patch('streamlit.file_uploader',return_value=[upload]):
             app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
             self.assertFalse(app.exception)
+            app.text_area[0].set_value('Required Skills: Python').run(timeout=30)
             app.button[0].click().run(timeout=30)
             self.assertFalse(app.exception)
             self.assertTrue(app.dataframe)

@@ -1,245 +1,178 @@
-import streamlit as st
-import pandas as pd
-import pickle
-import os
-import sys
+"""Local recruiter workflow orchestrating the existing Stage 0–5 services."""
 import hashlib
-
-# Configure Streamlit page for a modern look
-st.set_page_config(
-    page_title="Resume Classifier AI",
-    page_icon="📄",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# Import our backend logic safely
-# Since we wrapped the execution in if __name__ == '__main__': this is safe.
-from src.predict import hybrid_predict
-from src.document_extraction import DocumentExtractionError, classification_text
-from src.resume_intelligence import parse_resume_file
-from src.job_intelligence import parse_job_description
-from src.evidence import assess_candidate
-from src.ranking import CandidateFilters, rank_candidates, filter_candidates
+import pickle
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-# Custom CSS for styling
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: #0e1117;
-        color: #fafafa;
-    }
-    .main-header {
-        font-size: 40px;
-        font-weight: 700;
-        margin-bottom: 0px;
-        background: -webkit-linear-gradient(45deg, #4facfe, #00f2fe);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    .sub-header {
-        font-size: 18px;
-        color: #a0aab2;
-        margin-bottom: 30px;
-    }
-    .card {
-        background-color: #1e2229;
-        border-radius: 10px;
-        padding: 20px;
-        border: 1px solid #2d333b;
-        margin-bottom: 20px;
-    }
-    .prediction-title {
-        color: #4facfe;
-        font-weight: bold;
-    }
-    </style>
-""", unsafe_allow_html=True)
+import pandas as pd
+import streamlit as st
 
-# Load the complete raw-text pipeline
+from src.document_extraction import DocumentExtractionError, classification_text
+from src.evidence import assess_candidate
+from src.job_intelligence import parse_job_description
+from src.predict import hybrid_predict
+from src.ranking import filter_candidates, rank_candidates
+from src.resume_intelligence import parse_resume_file
+from src.recruiter_ui import (candidate_label, percentage, score, show_candidate,
+                              show_filters, show_job)
+
+st.set_page_config(page_title='Resume Intelligence & Candidate Evaluation', page_icon='📄', layout='wide')
+st.title('Resume Intelligence & Candidate Evaluation')
+st.caption('Evaluate resume evidence against a job, filter the ranked results, and inspect the reasons. '
+           'Decision support for recruiter review; claims are not independently verified.')
+
+
 @st.cache_resource
 def load_classification_model():
-    model_path = os.path.join("models", "model.pkl")
-    if not os.path.exists(model_path):
-        return None
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    return model
+    path = Path(__file__).resolve().parent / 'models' / 'model.pkl'
+    with path.open('rb') as stream:
+        return pickle.load(stream)
 
-model = load_classification_model()
 
-# Header
-st.markdown('<div class="main-header">Resume Classifier AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Upload resumes (PDF, DOCX, TXT) and instantly predict their job category using Hybrid Machine Learning.</div>', unsafe_allow_html=True)
+st.header('1. Job Setup')
+job_title = st.text_input('Job Title (optional)', key='input_job_title')
+job_description = st.text_area('Job Description', key='input_job_description')
+job_summary = st.container()
+st.header('2. Resumes')
+uploaded_files = st.file_uploader('Select PDF, DOCX, TXT, or supported images',
+                                type=['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'],
+                                accept_multiple_files=True, key='input_resumes') or []
+st.write(f'Selected resumes: {len(uploaded_files)}')
+metadata = [{'name': upload.name, 'size': len(upload.getbuffer()),
+             'digest': hashlib.sha256(upload.getbuffer()).hexdigest()} for upload in uploaded_files]
+with st.expander('Selected files', expanded=bool(uploaded_files)):
+    for item in metadata:
+        st.text(f'{item["name"]} · {item["size"]:,} bytes')
 
-if model is None:
-    st.error("Model not found! Please ensure you have trained the model using `python src/main.py` and that `models/model.pkl` exists.")
-    st.stop()
-
-# Batch Processing
-st.markdown("### Upload Resumes for Classification")
-uploaded_files = st.file_uploader("Select PDF, DOCX, or TXT files", type=["pdf", "docx", "txt", "png", "jpg", "jpeg"], accept_multiple_files=True)
-
-job_description = st.text_area("Job description (optional, for evidence assessment)")
-
-# Cache evaluated inputs across widget reruns. Changed inputs require evaluation again.
-batch_key = (job_description, tuple(
-    (upload.name, hashlib.sha256(upload.getbuffer()).hexdigest())
-    for upload in (uploaded_files or [])))
-
-if st.button("Classify Resumes"):
-    if not uploaded_files:
-        st.warning("Please upload at least one resume file.")
+# Content hashes detect same-name replacements. Sorting ignores upload order while
+# retaining duplicate multiplicity. No resume text or contact information is logged.
+signature = (job_title, job_description, tuple(sorted((m['name'], m['digest']) for m in metadata)))
+if st.session_state.get('input_signature') != signature:
+    had_results = 'ranking_result' in st.session_state
+    for key in list(st.session_state):
+        if key.startswith('filter_') or key in {
+                'evaluation_results', 'ranking_result', 'failed_uploads',
+                'selected_candidate', 'evaluation_signature'}:
+            del st.session_state[key]
+    st.session_state['input_signature'] = signature
+    st.session_state['uploaded_resume_metadata'] = metadata
+    parsed_job = parse_job_description(job_description) if job_description.strip() else None
+    if parsed_job is not None and job_title.strip():
+        parsed_job = replace(parsed_job, title=job_title.strip())
+    st.session_state['job_profile'] = parsed_job
+    if had_results:
+        st.info('Inputs changed. Evaluate Candidates again to see current results.')
+job = st.session_state.get('job_profile')
+with job_summary:
+    if job is None:
+        st.info('Create a job description to begin candidate evaluation.')
     else:
-        results = []
-        skipped = []
-        profiles = []
+        show_job(job)
+if not uploaded_files:
+    st.info('Upload one or more resumes to evaluate candidates.')
 
-        my_bar = st.progress(0)
+st.header('3. Evaluate')
+if st.button('Evaluate Candidates', type='primary', disabled=job is None or not uploaded_files):
+    # A failed retry must not leave old results visible.
+    for key in ['evaluation_results', 'ranking_result', 'failed_uploads',
+                'selected_candidate', 'evaluation_signature']:
+        st.session_state.pop(key, None)
+    try:
+        model = load_classification_model()
+    except Exception as error:
+        st.error(f'Cannot load the saved classification model ({type(error).__name__}). '
+                 'Check models/model.pkl and the pinned dependencies. No candidates were evaluated.')
+    else:
+        records, failures = [], []
+        progress = st.progress(0, text='Evaluating candidates…')
+        for index, upload in enumerate(uploaded_files):
+            phase = 'document extraction'
+            progress.progress(index / len(uploaded_files), text=f'Evaluating {index + 1}/{len(uploaded_files)}: {upload.name}')
+            try:
+                with TemporaryDirectory(prefix='resume-upload-') as directory:
+                    path = Path(directory) / Path(upload.name).name
+                    path.write_bytes(upload.getbuffer())
+                    profile = parse_resume_file(path)
+                raw_text = classification_text(profile.raw_text, upload.name, clean_images=False)
+                if not raw_text.strip():
+                    raise DocumentExtractionError('No readable resume text found.')
+                phase = 'classification'
+                prediction, confidence, _, method = hybrid_predict(raw_text, model)
+                classification = {'Filename': upload.name, 'Predicted Category': prediction,
+                                  'Confidence': f'{confidence:.1f}%' if confidence is not None else 'N/A',
+                                  'Method': method}
+                phase = 'evidence assessment'
+                assessment = assess_candidate(profile, job)
+                records.append({'filename': upload.name, 'profile': profile,
+                                'classification': classification, 'assessment': assessment})
+            except DocumentExtractionError as error:
+                failures.append({'filename': upload.name, 'reason': str(error)})
+            except Exception as error:
+                # Batch boundary: isolate unexpected failures without hiding their phase
+                # or exposing exception payloads that could contain resume/contact text.
+                failures.append({'filename': upload.name,
+                                 'reason': f'Unexpected {type(error).__name__} during {phase}. '
+                                           'Retry this file or investigate the local component.'})
+            progress.progress((index + 1) / len(uploaded_files), text=f'Processed {index + 1}/{len(uploaded_files)}')
+        st.session_state['failed_uploads'] = failures
+        try:
+            ranking = rank_candidates([r['assessment'] for r in records],
+                                      candidate_profiles=[r['profile'] for r in records])
+        except Exception as error:
+            st.error(f'Ranking failed ({type(error).__name__}). Results were not published; try evaluating again.')
+        else:
+            # Match by the exact retained assessment, not name or upload position:
+            # names and even identical submissions can be duplicated.
+            by_assessment = {id(record['assessment']): record for record in records}
+            st.session_state['evaluation_results'] = {
+                candidate.candidate_id: by_assessment[id(candidate.assessment)]
+                for candidate in ranking.ranked_candidates}
+            st.session_state['ranking_result'] = ranking
+            st.session_state['evaluation_signature'] = signature
 
-        for i, uploaded_file in enumerate(uploaded_files):
-            # Isolate uploads so filenames cannot overwrite existing project files.
-            with TemporaryDirectory(prefix="resume-upload-") as directory:
-                temp_path = Path(directory) / Path(uploaded_file.name).name
-                temp_path.write_bytes(uploaded_file.getbuffer())
-                try:
-                    profile = parse_resume_file(temp_path)
-                except DocumentExtractionError as error:
-                    skipped.append(f"{uploaded_file.name}: {error}")
-                    my_bar.progress((i + 1) / len(uploaded_files))
-                    continue
+failures = st.session_state.get('failed_uploads', [])
+if failures:
+    with st.expander(f'Failed files ({len(failures)})', expanded=True):
+        for failure in failures:
+            st.text(f'{failure["filename"]}: {failure["reason"]}')
 
-            raw_text = classification_text(profile.raw_text, uploaded_file.name, clean_images=False)
-            if not raw_text.strip():
-                skipped.append(uploaded_file.name)
-            else:
-                prediction, confidence, top3, method = hybrid_predict(raw_text, model)
-                results.append({
-                    "Filename": uploaded_file.name,
-                    "Predicted Category": prediction,
-                    "Confidence": f"{confidence:.1f}%" if confidence is not None else "N/A",
-                    "Method": method
-                })
-                profiles.append((uploaded_file.name, profile))
-
-            # Update Progress Bar
-            my_bar.progress((i + 1) / len(uploaded_files))
-
-        job = parse_job_description(job_description) if job_description.strip() else None
-        assessments = [assess_candidate(profile, job) for _, profile in profiles] if job else []
-        st.session_state["evaluated_batch"] = {
-            "key": batch_key, "results": results, "skipped": skipped,
-            "profiles": profiles, "assessments": assessments,
-            "ranking": rank_candidates(assessments, candidate_profiles=[p for _, p in profiles]) if job else None,
-        }
-
-batch = st.session_state.get("evaluated_batch")
-if batch and batch["key"] != batch_key:
-    st.info("Inputs changed. Click Classify Resumes to evaluate this batch.")
-if batch and batch["key"] == batch_key:
-    results, skipped, profiles = batch["results"], batch["skipped"], batch["profiles"]
-    st.success("Classification Complete!")
-
-    # Display Skipped files
-    if skipped:
-        st.warning(f"⚠️ Skipped {len(skipped)} files due to unreadable content or image-based PDFs without OCR fallback.")
-        with st.expander("Show skipped files"):
-            for s in skipped:
-                st.write(f"- {s}")
-
-    # Display Results
-    if results:
-        df_results = pd.DataFrame(results)
-
-        st.markdown("### Classification Results")
-        st.dataframe(df_results, use_container_width=True)
-
-        for profile_index, (filename, profile) in enumerate(profiles):
-            with st.expander(f"Candidate Information — {filename}"):
-                st.write({"Name": profile.candidate_name, "Email": profile.email,
-                          "Phone": profile.phone, "Location": profile.location})
-                st.write("Skills", profile.skills)
-                # JSON keeps nullable fields, source text and evidence inspectable.
-                st.json(profile.to_dict())
-
-            if job_description.strip():
-                assessment = batch["assessments"][profile_index]
-                with st.expander(f"Evidence assessment — {filename}"):
-                    st.write({"Rule-based match score": assessment.overall_match_score,
-                              "Evidence-adjusted match score": assessment.evidence_adjusted_match_score,
-                              "Assessed weight coverage": assessment.score_coverage})
-                    for group, requirements in [("Required", assessment.required_requirements),
-                                                 ("Preferred", assessment.preferred_requirements)]:
-                        st.write(group + " skills")
-                        for requirement in requirements:
-                            st.write(requirement.explanation)
-                            for evidence in requirement.evidence:
-                                st.caption(f"{evidence.source_type} · {evidence.strength} · {evidence.relevance}")
-                                st.text(evidence.source_text)
-                    st.write("Verify", assessment.concerns)
-                    st.caption(assessment.explanation)
-
-
-
-        # Grouping visually
-        st.markdown("### Job Category Breakdown")
-        category_counts = df_results["Predicted Category"].value_counts().reset_index()
-        category_counts.columns = ["Category", "Count"]
-
-        cols = st.columns(3)
-        for idx, row in category_counts.iterrows():
-            with cols[idx % 3]:
-                st.metric(label=row["Category"], value=f"{row['Count']} Resumes")
-
-        st.markdown("### Download Results")
-        csv = df_results.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download CSV Report",
-            data=csv,
-            file_name='resume_classification_results.csv',
-            mime='text/csv',
-        )
-
-    if batch["ranking"] is not None:
-        st.markdown("### Evidence-aware ranking")
-        st.caption("Decision support for recruiter review. Scores reflect resume information, not verified claims.")
-        ranking = batch["ranking"]
-        skills = sorted({skill for candidate in ranking.ranked_candidates
-                         for skill in (candidate.assessment.match_result.candidate_skills +
-                                       [r.requirement for r in candidate.assessment.required_requirements +
-                                        candidate.assessment.preferred_requirements])})
-        with st.expander("Ranking filters"):
-            minimum_score = st.number_input("Minimum evidence-adjusted score", min_value=0.0, max_value=100.0, value=None)
-            minimum_coverage = st.number_input("Minimum required-skill coverage (0–1)", min_value=0.0, max_value=1.0, value=None)
-            selected_skills = st.multiselect("Require direct skills", skills)
-            statuses = ["Any", "satisfied", "not_satisfied", "unknown", "not_required"]
-            experience = st.selectbox("Experience status", statuses)
-            education = st.selectbox("Education status", statuses)
-            strength = st.selectbox("Minimum evidence strength", ["Any", "weak", "moderate", "strong"])
-            st.caption("Strength applies to every selected skill; otherwise every required job skill, or preferred skills when none are required.")
-        filtered = filter_candidates(ranking, CandidateFilters(
-            minimum_score=minimum_score, minimum_required_skill_coverage=minimum_coverage,
-            required_skills=selected_skills,
-            experience_status=None if experience == "Any" else experience,
-            education_status=None if education == "Any" else education,
-            minimum_evidence_strength=None if strength == "Any" else strength))
-        st.write(f"{len(filtered.filtered_candidates)} of {len(ranking.ranked_candidates)} candidates meet the filters.")
-        rows = [{"Rank": c.rank, "Candidate": c.candidate_name or c.candidate_id,
-                 "Match": c.ranking_score, "Score coverage": c.score_coverage,
-                 "Required skill coverage": c.required_skill_coverage,
-                 "Evidence": str(c.evidence_strength_summary)} for c in filtered.filtered_candidates]
-        st.dataframe(pd.DataFrame(rows, columns=["Rank", "Candidate", "Match", "Score coverage",
-                                                "Required skill coverage", "Evidence"]), use_container_width=True)
-        for candidate in filtered.filtered_candidates:
-            with st.expander(f"Rank #{candidate.rank} — {candidate.candidate_name or 'Unnamed candidate'}"):
-                st.caption(candidate.candidate_id)
-                st.write(candidate.ranking_explanation)
-                st.write("Strengths", candidate.strengths)
-                st.write("Concerns", candidate.concerns)
-                st.write("Required", {r.requirement: r.status for r in candidate.assessment.required_requirements})
-                st.write("Preferred", {r.requirement: r.status for r in candidate.assessment.preferred_requirements})
-        with st.expander("Filter exclusions"):
+ranking = st.session_state.get('ranking_result')
+if ranking is not None:
+    records = st.session_state['evaluation_results']
+    st.header('4. Candidate Ranking')
+    st.write(f'{len(ranking.ranked_candidates)} evaluated successfully · {len(failures)} failed')
+    if not ranking.ranked_candidates:
+        st.info('No resumes could be evaluated. Review failed files and try again.')
+    else:
+        # Preserve the earlier classification view and existing CSV download.
+        with st.expander('Classification results'):
+            classification = pd.DataFrame([record['classification'] for record in records.values()])
+            st.dataframe(classification, hide_index=True, use_container_width=True)
+            st.write('Job category breakdown', classification['Predicted Category'].value_counts().to_dict())
+            st.download_button('Download classification CSV', classification.to_csv(index=False).encode('utf-8'),
+                               file_name='resume_classification_results.csv', mime='text/csv')
+        filtered = filter_candidates(ranking, show_filters(ranking))
+        st.write(f'Showing {len(filtered.filtered_candidates)} of {len(ranking.ranked_candidates)} candidates '
+                 f'· {len(filtered.excluded_candidates)} excluded by filters')
+        with st.expander('Filter exclusions'):
             for excluded in filtered.excluded_candidates:
-                st.write(excluded.candidate.candidate_name or excluded.candidate.candidate_id, excluded.reasons)
+                st.write(candidate_label(excluded.candidate), excluded.reasons)
+        if not filtered.filtered_candidates:
+            st.session_state.pop('selected_candidate', None)
+            st.info('No candidates match the current filters. Try relaxing one or more filters.')
+        else:
+            rows = [{'Rank': c.rank, 'Candidate': candidate_label(c),
+                     'Evidence-adjusted match': score(c.ranking_score),
+                     'Score coverage': percentage(c.score_coverage),
+                     'Required-skill coverage': percentage(c.required_skill_coverage),
+                     'Evidence': ', '.join(f'{k}: {v}' for k, v in c.evidence_strength_summary.items()) or 'Not assessed'}
+                    for c in filtered.filtered_candidates]
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            candidates = {c.candidate_id: c for c in filtered.filtered_candidates}
+            if st.session_state.get('selected_candidate') not in candidates:
+                st.session_state['selected_candidate'] = next(iter(candidates))
+            selected = st.selectbox('Inspect candidate', list(candidates), key='selected_candidate',
+                                    format_func=lambda key: f'#{candidates[key].rank} — {candidate_label(candidates[key])}')
+            record = records[selected]
+            show_candidate(candidates[selected], record['profile'], record['filename'], record['classification'])

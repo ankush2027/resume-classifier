@@ -106,7 +106,7 @@ It will open an interactive prompt. You can **paste a file path** (`/Users/You/r
 ```bash
 streamlit run app.py
 ```
-This opens a browser with the full drag-and-drop web interface for batch resume classification.
+This opens the recruiter dashboard: enter a job, upload resumes, evaluate, filter and inspect candidates.
 
 ---
 
@@ -403,7 +403,7 @@ existing assessment model does not contain a job identity that Stage 5 can valid
 Streamlit retains evaluated uploads during filter reruns, displays a compact ranked table,
 requirement states, explanations and exclusion reasons, and preserves classification,
 profile and evidence views. Changing the job or uploads requires clicking Classify Resumes
-again. Ranking is decision support, not autonomous hiring or a prediction of job performance;
+again (Stage 6 calls this action Evaluate Candidates). Ranking is decision support, not autonomous hiring or a prediction of job performance;
 all evidence remains rule-based information in resumes, not verified claims.
 
 Run all regression tests (pytest is a development-only tool):
@@ -412,3 +412,60 @@ Run all regression tests (pytest is a development-only tool):
 python -m pip install pytest==8.4.2
 python -m pytest -q
 ```
+
+## Stage 6: Recruiter dashboard and end-to-end workflow
+
+Start the local dashboard with `streamlit run app.py`, using the existing saved
+classification model and dependencies. No external AI service is required.
+
+```text
+Job Description → Multiple Resume Upload → Candidate Evaluation
+                → Evidence-Aware Ranking → Filtering → Candidate Detail Review
+```
+
+Enter a description and optionally a job title. The existing job parser supplies a
+compact requirement summary; the title field labels the job without changing its
+requirements. Upload PDF, DOCX, TXT, or supported images; OCR uses the existing local
+Stage 1 dependencies. Click **Evaluate Candidates** once both description and resumes
+are present. Classification remains available in a results expander, including its
+existing CSV download. The CLI classification workflows are unchanged.
+
+The ranked table shows names (or `Candidate N`), evidence-adjusted match scores,
+assessed-weight coverage, direct required-skill coverage and the existing evidence
+strength summary. Contact details appear only in the selected candidate's detail view.
+Filters call Stage 5 directly and expose exclusion reasons. They produce a displayed
+subset, not a saved hiring decision or a persistent shortlist.
+
+Select a candidate to inspect the structured profile, classification, Stage 3 matching,
+Stage 4 evidence-adjusted score, required/preferred requirement states, verbatim evidence
+snippets, experience, education, projects, strengths, concerns and Stage 5 rank explanation.
+Transferable evidence is explicitly separate from direct coverage. Missing and unknown
+remain distinct. Evidence is information found in the resume; claims are not independently
+verified. Scores are deterministic decision support, not hiring probabilities or predictions
+of real-world performance.
+
+Session state separates inputs (`input_*`, `job_profile`, `uploaded_resume_metadata`),
+evaluation (`evaluation_results`, `ranking_result`, `failed_uploads`, `evaluation_signature`),
+filters (`filter_*`) and selection (`selected_candidate`). Filter and selection changes
+reuse the stored profiles, classifications, assessments and ranking. They do not rerun
+extraction, classification, matching, evidence assessment or ranking. File content hashes
+are checked on reruns, so input checking still reads uploaded bytes.
+
+Changing the title, description, filenames, file contents or duplicate-file count clears
+evaluation, filter and selection state immediately. Reordering the same upload set does
+not invalidate results. Reverting changed inputs does not resurrect an earlier evaluation;
+click Evaluate Candidates again. Repeated explicit evaluation requests rerun the batch.
+Unsupported, empty and unreadable files are reported individually; processing continues
+for other files. Unexpected failures identify the affected processing phase and exception
+type without displaying internal exception payloads. Missing/unloadable model and batch
+ranking errors remain visible rather than publishing incomplete results.
+
+This remains a local, sequential, in-memory prototype: session loss/restart loses results,
+there is no database, authentication, durable shortlist, external API, or background job
+processing. Large batches can take time and memory. Stage 0–5 domain rules are unchanged;
+`src/recruiter_ui.py` only formats existing data and gathers filter inputs. The dashboard
+requires a job before evaluation; the earlier profile-upload UI regression now supplies
+that job while keeping its classification/profile assertions.
+
+Run `python -m pytest -q` for the full regression suite. Stage 6 AppTest cases use synthetic
+uploads and check the workflow, failure handling, invalidation and service call counts.
