@@ -17,6 +17,8 @@ st.set_page_config(
 from src.predict import hybrid_predict
 from src.document_extraction import DocumentExtractionError, classification_text
 from src.resume_intelligence import parse_resume_file
+from src.job_intelligence import parse_job_description
+from src.evidence import assess_candidate
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -77,6 +79,8 @@ if model is None:
 # Batch Processing
 st.markdown("### Upload Resumes for Classification")
 uploaded_files = st.file_uploader("Select PDF, DOCX, or TXT files", type=["pdf", "docx", "txt", "png", "jpg", "jpeg"], accept_multiple_files=True)
+
+job_description = st.text_area("Job description (optional, for evidence assessment)")
 
 if st.button("Classify Resumes"):
     if not uploaded_files:
@@ -139,6 +143,24 @@ if st.button("Classify Resumes"):
                     st.write("Skills", profile.skills)
                     # JSON keeps nullable fields, source text and evidence inspectable.
                     st.json(profile.to_dict())
+
+                if job_description.strip():
+                    assessment = assess_candidate(profile, parse_job_description(job_description))
+                    with st.expander(f"Evidence assessment — {filename}"):
+                        st.write({"Rule-based match score": assessment.overall_match_score,
+                                  "Evidence-adjusted match score": assessment.evidence_adjusted_match_score,
+                                  "Assessed weight coverage": assessment.score_coverage})
+                        for group, requirements in [("Required", assessment.required_requirements),
+                                                     ("Preferred", assessment.preferred_requirements)]:
+                            st.write(group + " skills")
+                            for requirement in requirements:
+                                st.write(requirement.explanation)
+                                for evidence in requirement.evidence:
+                                    st.caption(f"{evidence.source_type} · {evidence.strength} · {evidence.relevance}")
+                                    st.text(evidence.source_text)
+                        st.write("Verify", assessment.concerns)
+                        st.caption(assessment.explanation)
+
 
             
             # Grouping visually

@@ -270,3 +270,77 @@ Example: 3/3 required skills, 1/2 preferred skills, satisfied experience and edu
 produce `70 + 7.5 + 10 + 5 = 92.5`. If experience and education are unknown, that same
 skill overlap scores `(70 + 7.5) / 0.85 = 91.18`, with 85% coverage. No multiple-candidate
 ranking, comparison, UI, API, or Stage 4 evidence intelligence is included.
+
+## Stage 4: Evidence-based candidate intelligence
+
+```text
+CandidateProfile + JobProfile → unchanged Stage 3 MatchResult
+                            → evidence analysis → CandidateAssessment
+```
+
+```python
+from src.evidence import assess_candidate
+assessment = assess_candidate(candidate_profile, job_profile)
+print(assessment.to_dict())
+```
+
+**The system does not treat keyword presence as proof of professional experience.**
+This is deterministic/rule-based, not an LLM judgement. Even strong evidence describes
+resume wording, not independently verified employment, skill level or truthfulness.
+
+`overall_match_score` and `match_result` preserve Stage 3's result. Required/preferred
+requirement assessments add status, strongest evidence label, direct/transferable
+flags, source snippets, field paths and explanations. Only requested skills/concepts
+are assessed; unrelated resume keywords do not improve the score. Existing canonical
+skill aliases are reused. Explicit unlisted concepts (e.g. JWT or authentication) can
+match literal text, but are never inferred from FastAPI or other framework mentions.
+
+Rules in `src/evidence/rules.py` distinguish:
+
+- **Weak:** lists, summaries, isolated mentions, or indirect team exposure. An
+  Experience heading alone does not make a mention strong.
+- **Moderate:** a project/academic/achievement snippet contains both a concrete action
+  and task, or a certification snippet explicitly mentions a credential.
+- **Strong:** an experience snippet contains a concrete work action and task alongside
+  the concept. Production experience is never inferred from a project heading.
+- **Transferable:** a small explicit backend/database/cloud grouping identifies related
+  technologies. Flask is not FastAPI, Azure is not AWS, and SQL is not PostgreSQL.
+  Related evidence never counts as a direct match or earns direct scoring credit.
+- **Missing:** no supporting mention in supplied text; this does not prove a skill is
+  absent. Negated/hypothetical-only mentions are **unknown**, with original text retained.
+
+Statuses are `evidenced`, `weak_evidence`, `present_no_context`, `transferable`,
+`missing`, and `unknown`. Structured skill entries without contextual text remain
+weak; generated evidence summaries are not trusted as new source text. Snippets come
+from raw sections or actual structured fields. Duplicate concept/snippet pairs keep
+the strongest source. Repeated keywords never add strength or scoring credit; five
+weak-context lines can trigger a neutral verification concern, not an accusation.
+
+The separate **evidence-adjusted match score** retains Stage 3's 70/15/10/5 weights
+and available-component normalization. Each requested skill gets its strongest direct
+support: strong=1.0, moderate=0.7, weak=0.3; no supporting direct evidence=0.0.
+That zero means no evidence credit, not proven inability. Required/preferred component
+values are the means across their unique requested skills. Frequency and transferability
+add nothing. Experience/education contributions and unknown handling remain exactly
+Stage 3's; evidence relevance is reported separately rather than silently overriding
+those checks. The score can recover evidence missed by the profile's skill list, e.g.
+a certification mention, so it is not necessarily lower than Stage 3's score. Both
+scores remain visible, and discrepancies are flagged. Neither score is a probability
+or hiring recommendation; unknown/no-requirement components and coverage remain explicit.
+
+Experience relevance checks a small set of backend/frontend/data-analysis/cloud
+markers plus explicitly requested skills within the same concrete work snippet.
+Python notebooks can partially support a backend-Python requirement without establishing
+backend experience. Relevance does not verify duration. No relevant text means unknown.
+Education verification remains Stage 3's limited degree/field check. Optional, indirect,
+negated or unusual prose may be conservatively missed: these are simple lexical rules,
+not semantic understanding or a way to detect deceptive claims.
+
+For four required skills, a list-only resume scores 30 on evidence while retaining
+its Stage 3 skill-match score of 100. Three strong work-backed skills plus one moderate
+project-backed skill score 92.5. This tests the rules, not differences in real candidates.
+
+Streamlit has an optional job-description text field and a per-resume evidence expander
+with both scores, explanations, concerns and verbatim snippets. Existing classification
+and profile views remain available. There is no ranking, comparison, recruiter workflow,
+new API service, external service or Stage 5 functionality.
