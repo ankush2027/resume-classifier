@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import pickle
 import pandas as pd
@@ -10,27 +9,11 @@ if __package__ in (None, ""):
 
 from src.predict import hybrid_predict as predict_resume
 
-# PDF and DOCX support — handles real-world resume files from job portals/email
-try:
-    import pdfplumber
-    PDF_SUPPORT = True
-except ImportError:
-    PDF_SUPPORT = False
-
-try:
-    from docx import Document
-    DOCX_SUPPORT = True
-except ImportError:
-    DOCX_SUPPORT = False
-
-# OCR support for image-based PDFs and image files
-try:
-    import pytesseract
-    from pdf2image import convert_from_path
-    from PIL import Image
-    OCR_SUPPORT = True
-except ImportError:
-    OCR_SUPPORT = False
+from src.document_extraction import (
+    DocumentExtractionError, SUPPORTED_EXTENSIONS, classification_text,
+    clean_pdf_text, extract_text, extract_pdf, extract_docx, extract_txt, extract_image,
+)
+from src.resume_intelligence import parse_resume, parse_resume_file
 
 
 # Helper: pretty section header for terminal
@@ -40,99 +23,10 @@ def section(title):
     print(f"{'─' * 50}")
 
 
-# PDF-specific: clean up line-level noise from extraction
-def clean_pdf_text(text):
-    lines = text.split('\n')
-    cleaned = []
-    for line in lines:
-        line = line.strip()
-        if re.match(r'^\d+$', line):   # standalone page numbers
-            continue
-        if len(line) < 3:              # too short to be meaningful
-            continue
-        cleaned.append(line)
-    return ' '.join(cleaned)
-
-
 def hybrid_predict(raw_text, model):
     """Keep the batch return shape while sharing single-resume inference."""
     category, confidence, _, method = predict_resume(raw_text, model)
     return category, confidence, method
-
-
-# Extract text from a PDF file
-def extract_pdf(filepath):
-    if not PDF_SUPPORT:
-        print("  ⚠  pdfplumber not installed. Run: pip install pdfplumber")
-        return ""
-    text = ""
-    with pdfplumber.open(filepath) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    
-    cleaned = clean_pdf_text(text)
-    
-    # If standard extraction gets nothing, fallback to OCR
-    if not cleaned.strip() and OCR_SUPPORT:
-        try:
-            images = convert_from_path(filepath)
-            ocr_text = ""
-            for img in images:
-                ocr_text += pytesseract.image_to_string(img) + "\n"
-            cleaned = clean_pdf_text(ocr_text)
-        except Exception:
-            pass
-
-    return cleaned
-
-
-# Extract text from a Word (.docx) file
-def extract_docx(filepath):
-    if not DOCX_SUPPORT:
-        return ""
-    doc = Document(filepath)
-    return " ".join([para.text for para in doc.paragraphs if para.text.strip()])
-
-
-# Extract text from a plain text file
-def extract_txt(filepath):
-    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-        return f.read()
-
-
-# Extract text from an image
-def extract_image(filepath):
-    if not OCR_SUPPORT:
-        print("  ⚠  pytesseract not installed. OCR requires Tesseract.")
-        return ""
-    try:
-        img = Image.open(filepath)
-        text = pytesseract.image_to_string(img)
-        return clean_pdf_text(text)
-    except Exception as e:
-        print(f"  ⚠  OCR failed: {e}")
-        return ""
-
-
-# Route file to correct extractor based on extension
-def extract_text(filepath):
-    ext = os.path.splitext(filepath)[1].lower()
-    if ext == ".pdf":
-        return extract_pdf(filepath)
-    elif ext == ".docx":
-        return extract_docx(filepath)
-    elif ext == ".txt":
-        return extract_txt(filepath)
-    elif ext in [".png", ".jpg", ".jpeg"]:
-        return extract_image(filepath)
-    else:
-        return ""
-
-
-# Supported file types
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg"}
 
 
 if __name__ == "__main__":
@@ -166,7 +60,13 @@ if __name__ == "__main__":
 
         for filename in sorted(files):
             filepath = os.path.join(INPUT_FOLDER, filename)
-            raw_text = extract_text(filepath)
+            try:
+                profile = parse_resume_file(filepath)
+            except DocumentExtractionError as error:
+                print(f"  SKIPPED {filename}: {error}")
+                skipped.append(filename)
+                continue
+            raw_text = classification_text(profile.raw_text, filepath)
 
             # Image-based PDFs give zero text — cannot classify
             if not raw_text.strip():
@@ -204,7 +104,8 @@ if __name__ == "__main__":
             sys.exit(1)
 
         for _, row in df_in.iterrows():
-            raw_text = str(row.get("Resume", ""))
+            profile = parse_resume(str(row.get("Resume", "")))
+            raw_text = profile.raw_text
             category, confidence, method = hybrid_predict(raw_text, model)
 
             conf_str   = f"{confidence:.1f}%" if confidence is not None else "N/A"

@@ -1,5 +1,4 @@
 import pickle
-import re
 import os
 import sys
 from pathlib import Path
@@ -7,27 +6,11 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# PDF and DOCX support — accept real resume files in addition to pasted text
-try:
-    import pdfplumber
-    PDF_SUPPORT = True
-except ImportError:
-    PDF_SUPPORT = False
-
-try:
-    from docx import Document
-    DOCX_SUPPORT = True
-except ImportError:
-    DOCX_SUPPORT = False
-
-# OCR support for image-based PDFs and image files
-try:
-    import pytesseract
-    from pdf2image import convert_from_path
-    from PIL import Image
-    OCR_SUPPORT = True
-except ImportError:
-    OCR_SUPPORT = False
+from src.document_extraction import (
+    DocumentExtractionError, classification_text, clean_pdf_text,
+    extract_pdf, extract_docx, OCR_SUPPORT,
+)
+from src.resume_intelligence import parse_resume, parse_resume_file
 
 
 # Helper: pretty section header for terminal
@@ -35,20 +18,6 @@ def section(title):
     print(f"\n{'─' * 50}")
     print(f"  {title}")
     print(f"{'─' * 50}")
-
-
-# PDF-specific: clean up line-level noise from extraction
-def clean_pdf_text(text):
-    lines = text.split('\n')
-    cleaned = []
-    for line in lines:
-        line = line.strip()
-        if re.match(r'^\d+$', line):   # standalone page numbers
-            continue
-        if len(line) < 3:              # too short to be meaningful
-            continue
-        cleaned.append(line)
-    return ' '.join(cleaned)
 
 
 # Domain keyword dictionary for hybrid classification fallback
@@ -144,43 +113,6 @@ def hybrid_predict(raw_text, model):
     return ml_pred, confidence, top3, "ML"
 
 
-# Extract text from a PDF file
-def extract_pdf(filepath):
-    if not PDF_SUPPORT:
-        print("  ⚠  pdfplumber not installed. Run: pip install pdfplumber")
-        return ""
-    text = ""
-    with pdfplumber.open(filepath) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-                
-    cleaned = clean_pdf_text(text)
-    
-    # If standard extraction gets nothing, fallback to OCR
-    if not cleaned.strip() and OCR_SUPPORT:
-        try:
-            images = convert_from_path(filepath)
-            ocr_text = ""
-            for img in images:
-                ocr_text += pytesseract.image_to_string(img) + "\n"
-            cleaned = clean_pdf_text(ocr_text)
-        except Exception:
-            pass
-
-    return cleaned
-
-
-# Extract text from a Word (.docx) file
-def extract_docx(filepath):
-    if not DOCX_SUPPORT:
-        print("  ⚠  python-docx not installed. Run: pip install python-docx")
-        return ""
-    doc = Document(filepath)
-    return " ".join([para.text for para in doc.paragraphs if para.text.strip()])
-
-
 if __name__ == "__main__":
     # Load the complete raw-text pipeline
     section("Resume Role Classifier")
@@ -217,47 +149,18 @@ if __name__ == "__main__":
 
         # Check if the input is a file path
         if os.path.isfile(user_input):
-            ext = os.path.splitext(user_input)[1].lower()
-
-            if ext == ".pdf":
-                print(f"  Reading PDF: {user_input}")
-                raw_text = extract_pdf(user_input)
-            elif ext == ".docx":
-                print(f"  Reading DOCX: {user_input}")
-                raw_text = extract_docx(user_input)
-            elif ext == ".txt":
-                with open(user_input, "r", encoding="utf-8", errors="ignore") as f:
-                    raw_text = f.read()
-            elif ext in [".png", ".jpg", ".jpeg"]:
-                print(f"  Reading Image: {user_input}")
-                if not OCR_SUPPORT:
-                    print("  ⚠  pytesseract not installed. OCR requires Tesseract.")
-                    raw_text = ""
-                else:
-                    try:
-                        img = Image.open(user_input)
-                        raw_text = pytesseract.image_to_string(img)
-                    except Exception as e:
-                        print(f"  ⚠  OCR failed: {e}")
-                        raw_text = ""
-            else:
-                print(f"  ⚠  Unsupported file type '{ext}'. Use .pdf, .docx, .txt or images\n")
+            try:
+                profile = parse_resume_file(user_input)
+            except DocumentExtractionError as error:
+                print(f"  Could not read resume: {error}")
                 continue
-
-            # Image-based PDF gives empty text — cannot classify
-            cleaned_raw = clean_pdf_text(raw_text)
-            if not cleaned_raw.strip():
-                if ext == ".pdf":
-                    print("  ✗ Could not extract text — this appears to be an image-based PDF.")
-                    print("    → It was scanned/photographed. Convert it to a text-based PDF first.\n")
-                else:
-                    print("  ✗ Could not extract text from this file.\n")
+            sample_resume = classification_text(profile.raw_text, user_input, clean_images=False)
+            if not sample_resume.strip():
+                print("  No readable resume text found.")
                 continue
-
-            sample_resume = raw_text
         else:
-            # Treat input as pasted resume text
-            sample_resume = user_input
+            profile = parse_resume(user_input)
+            sample_resume = profile.raw_text
 
         prediction, confidence, top3, method = hybrid_predict(sample_resume, model)
 

@@ -14,15 +14,11 @@ st.set_page_config(
 
 # Import our backend logic safely
 # Since we wrapped the execution in if __name__ == '__main__': this is safe.
-from src.predict import hybrid_predict, extract_pdf, extract_docx, clean_pdf_text, OCR_SUPPORT
-try:
-    from PIL import Image
-except ImportError:
-    pass
-try:
-    import pytesseract
-except ImportError:
-    pass
+from src.predict import hybrid_predict
+from src.document_extraction import DocumentExtractionError, classification_text
+from src.resume_intelligence import parse_resume_file
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # Custom CSS for styling
 st.markdown("""
@@ -88,41 +84,26 @@ if st.button("Classify Resumes"):
     else:
         results = []
         skipped = []
+        profiles = []
 
         my_bar = st.progress(0)
         
         for i, uploaded_file in enumerate(uploaded_files):
-            # Save uploaded file temporarily to use file paths like the original system
-            temp_path = os.path.join("output", uploaded_file.name)
-            os.makedirs("output", exist_ok=True)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+            # Isolate uploads so filenames cannot overwrite existing project files.
+            with TemporaryDirectory(prefix="resume-upload-") as directory:
+                temp_path = Path(directory) / Path(uploaded_file.name).name
+                temp_path.write_bytes(uploaded_file.getbuffer())
+                try:
+                    profile = parse_resume_file(temp_path)
+                except DocumentExtractionError as error:
+                    skipped.append(f"{uploaded_file.name}: {error}")
+                    my_bar.progress((i + 1) / len(uploaded_files))
+                    continue
 
-            ext = os.path.splitext(uploaded_file.name)[1].lower()
-            raw_text = ""
-            
-            # File Extraction Logic
-            if ext == ".pdf":
-                raw_text = extract_pdf(temp_path)
-            elif ext == ".docx":
-                raw_text = extract_docx(temp_path)
-            elif ext == ".txt":
-                with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
-                    raw_text = f.read()
-            elif ext in [".png", ".jpg", ".jpeg"]:
-                if OCR_SUPPORT:
-                    try:
-                        img = Image.open(temp_path)
-                        raw_text = pytesseract.image_to_string(img)
-                    except Exception:
-                        pass
-                
-            # Image-based PDF fallback
-            cleaned_raw = clean_pdf_text(raw_text)
-            if not cleaned_raw.strip():
+            raw_text = classification_text(profile.raw_text, uploaded_file.name, clean_images=False)
+            if not raw_text.strip():
                 skipped.append(uploaded_file.name)
             else:
-                # Prediction
                 prediction, confidence, top3, method = hybrid_predict(raw_text, model)
                 results.append({
                     "Filename": uploaded_file.name,
@@ -130,11 +111,8 @@ if st.button("Classify Resumes"):
                     "Confidence": f"{confidence:.1f}%" if confidence is not None else "N/A",
                     "Method": method
                 })
+                profiles.append((uploaded_file.name, profile))
 
-            # Cleanup Temp File
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                
             # Update Progress Bar
             my_bar.progress((i + 1) / len(uploaded_files))
             
@@ -153,6 +131,15 @@ if st.button("Classify Resumes"):
             
             st.markdown("### Classification Results")
             st.dataframe(df_results, use_container_width=True)
+
+            for filename, profile in profiles:
+                with st.expander(f"Candidate Information — {filename}"):
+                    st.write({"Name": profile.candidate_name, "Email": profile.email,
+                              "Phone": profile.phone, "Location": profile.location})
+                    st.write("Skills", profile.skills)
+                    # JSON keeps nullable fields, source text and evidence inspectable.
+                    st.json(profile.to_dict())
+
             
             # Grouping visually
             st.markdown("### Job Category Breakdown")

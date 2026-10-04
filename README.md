@@ -146,3 +146,62 @@ There are few unique resumes per category; a small held-out result is preliminar
 Exact/normalized duplicate separation does not establish independence of near-duplicate
 templates or prove real-world candidate performance. Tests repeat the fixed experiment
 only to verify reproducibility, not to tune against test results.
+
+## Stage 1: Resume document intelligence
+
+```text
+Resume file → shared document extraction → CandidateProfile → existing ML classification
+```
+
+The public API runs locally and deterministically, without an LLM or external API:
+
+```python
+from src.resume_intelligence import parse_resume, parse_resume_file
+
+profile = parse_resume_file("resume.pdf")  # PDF, DOCX, TXT, PNG, JPG, JPEG
+# Or: profile = parse_resume("Name: Asha Rao\nSkills: Python, PostgreSQL")
+print(profile.to_dict())
+```
+
+`CandidateProfile` contains name, email, phone, labeled location, LinkedIn/GitHub/
+portfolio links, education, experience, projects, skills, certifications,
+achievements, raw extracted text, and lightweight source snippets. Missing fields
+are `None` or empty lists. The original text is retained; model preprocessing is
+never applied to it. Non-string parser input returns an empty profile. File reading
+errors raise `DocumentExtractionError`; the UI and command-line tools report them.
+
+Rules operate on recognized section headings and preserve ambiguous entry text.
+Names require an explicit `Name:` label or a short name-shaped header near contact
+information; headings, role titles and contact values are rejected. Uncertain names
+stay unavailable. Locations require an explicit label. Dates are retained as written;
+no dates, experience duration, institutions or employers are inferred.
+
+Skills and aliases live in `src/resume_intelligence/skills.json`. Extend that file
+rather than scattering keywords through parser code. Long aliases take precedence:
+C, C++, C#, .NET and ASP.NET remain distinct. C/R require uppercase tokens in a skills
+context; Go requires that context or the alias Golang. Skills are **text mentions**,
+not verified proficiency, endorsements or evidence of suitability for a job.
+
+`src/document_extraction.py` consolidates the existing readers. Line breaks are
+preserved for section detection; a small compatibility formatter retains the old
+PDF/image/DOCX input shape for classification. TXT decoding replaces invalid bytes.
+OCR remains optional and needs the existing pytesseract/pdf2image/Pillow Python
+packages plus Tesseract/Poppler system tools. OCR errors are now explicit instead
+of silently swallowed. Text PDFs and DOCX/TXT need no OCR installation.
+
+After classification, Streamlit exposes a **Candidate Information** expander for
+each readable upload, including the full structured profile and evidence. Existing
+classification results remain visible. Uploads use temporary files rather than
+writing into the project's output directory.
+
+Run all tests with `python -m unittest discover -s tests -v`. Stage 1 parser unit tests
+use synthetic text. Local integration tests additionally use the three PDFs under
+`pdf/` when available, without modifying them; those local files are not committed.
+OCR routes are tested with mocks, not proof of OCR accuracy on scanned documents.
+The existing Stage 0 repeatability test fits temporary in-memory models but does not
+replace the saved artifact or evaluation reports.
+
+This is a first deterministic parser, not perfect NLP: unusual layouts, DOCX tables,
+columns, unlabeled contact data and entries without clear boundaries can remain
+partially parsed. Bullet-only projects keep their descriptions with an unavailable
+name. There is no job matching, ranking, database, REST API or recruiter workflow.

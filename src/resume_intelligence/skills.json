@@ -1,0 +1,29 @@
+{
+  "Programming": {
+    "Python": [], "Java": [], "C": [], "C++": ["cplusplus"],
+    "C#": ["csharp", "c sharp"], ".NET": ["dotnet"],
+    "JavaScript": ["javascript", "js"], "TypeScript": ["typescript"],
+    "Go": ["golang"], "Rust": [], "R": []
+  },
+  "Backend": {
+    "FastAPI": [], "Flask": [], "Django": [], "Spring": ["spring boot"],
+    "Node.js": ["nodejs", "node js"], "REST API": ["rest apis", "restful api", "restful apis"],
+    "ASP.NET": ["aspnet"]
+  },
+  "Databases": {
+    "PostgreSQL": ["postgres"], "MySQL": [], "MongoDB": ["mongo db"], "Redis": [], "SQL": []
+  },
+  "Cloud/DevOps": {
+    "AWS": ["amazon web services"], "Azure": ["microsoft azure"],
+    "GCP": ["google cloud", "google cloud platform"], "Docker": [],
+    "Kubernetes": ["k8s"], "Git": [], "CI/CD": ["ci cd", "ci-cd", "continuous integration"]
+  },
+  "ML/AI": {
+    "Machine Learning": [], "Deep Learning": [], "NLP": ["natural language processing"],
+    "Computer Vision": [], "TensorFlow": [], "PyTorch": [],
+    "scikit-learn": ["sklearn", "scikit learn"], "Pandas": [], "NumPy": []
+  },
+  "Frontend": {
+    "React": ["react.js", "reactjs"], "Angular": ["angularjs"], "HTML": ["html5"], "CSS": ["css3"]
+  }
+}
