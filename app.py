@@ -15,7 +15,7 @@ from src.predict import hybrid_predict
 from src.ranking import filter_candidates, rank_candidates
 from src.resume_intelligence import parse_resume_file
 from src.recruiter_ui import (candidate_label, percentage, score, show_candidate,
-                              show_filters, show_job)
+                              show_filters, show_job, show_comparison)
 
 st.set_page_config(page_title='Resume Intelligence & Candidate Evaluation', page_icon='📄', layout='wide')
 st.title('Resume Intelligence & Candidate Evaluation')
@@ -53,7 +53,7 @@ if st.session_state.get('input_signature') != signature:
     for key in list(st.session_state):
         if key.startswith('filter_') or key in {
                 'evaluation_results', 'ranking_result', 'failed_uploads',
-                'selected_candidate', 'evaluation_signature'}:
+                'selected_candidate', 'evaluation_signature', 'comparison_selection'}:
             del st.session_state[key]
     st.session_state['input_signature'] = signature
     st.session_state['uploaded_resume_metadata'] = metadata
@@ -76,7 +76,7 @@ st.header('3. Evaluate')
 if st.button('Evaluate Candidates', type='primary', disabled=job is None or not uploaded_files):
     # A failed retry must not leave old results visible.
     for key in ['evaluation_results', 'ranking_result', 'failed_uploads',
-                'selected_candidate', 'evaluation_signature']:
+                'selected_candidate', 'evaluation_signature', 'comparison_selection']:
         st.session_state.pop(key, None)
     try:
         model = load_classification_model()
@@ -176,3 +176,5 @@ if ranking is not None:
                                     format_func=lambda key: f'#{candidates[key].rank} — {candidate_label(candidates[key])}')
             record = records[selected]
             show_candidate(candidates[selected], record['profile'], record['filename'], record['classification'])
+
+        show_comparison(ranking)

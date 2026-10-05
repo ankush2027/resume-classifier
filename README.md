@@ -469,3 +469,42 @@ that job while keeping its classification/profile assertions.
 
 Run `python -m pytest -q` for the full regression suite. Stage 6 AppTest cases use synthetic
 uploads and check the workflow, failure handling, invalidation and service call counts.
+
+## Stage 7: Candidate comparison
+
+After evaluation, select **2–4 candidates** in **Candidate Comparison**. The selector
+uses the full evaluated batch, including candidates hidden by filters. Comparison
+selection persists during filtering and normal candidate inspection. **Clear comparison**
+removes it; changing job/upload inputs or explicitly reevaluating clears it automatically.
+Comparison views are rebuilt from stored results, so no stale comparison snapshot is kept.
+
+```text
+CandidateAssessment → RankedCandidate → Recruiter Workflow → Candidate Comparison
+```
+
+The overview shows original rank, Stage 3 match, Stage 4 evidence-adjusted score,
+coverage, and existing experience/education statuses. Required/preferred skill tables
+preserve direct, transferable, missing and unknown states and show a representative
+resume excerpt where available. Evidence summaries distinguish professional from project
+sources. Strengths, concerns, original ranking explanations and deterministic pairwise
+observations make differences inspectable. Full evidence remains in candidate inspection.
+
+```python
+from src.comparison import compare_candidates
+comparison = compare_candidates(ranking_result, selected_candidate_ids)  # 2–4 distinct IDs
+```
+
+The API selects from one existing ranked batch and orders columns by original rank.
+It retains original objects and values, does not rescore or rerank, and rejects unknown
+or repeated identifiers. Separate submissions with distinct Stage 5 IDs remain selectable,
+even if their names or resumes match. Missing assessment records are unassessed, not
+inferred missing skills. Available source labels are taken from supporting direct evidence;
+transferable and negated snippets cannot establish direct professional/project support.
+Repetition adds no comparison advantage. A lower-ranked candidate may have better coverage
+on one dimension; pairwise observations describe that without overriding the full ranking.
+
+Comparison triggers no extraction, OCR, classification, job parsing, matching, assessment,
+or ranking. Stage 6 still checks uploaded content hashes on reruns. No extra dependencies
+or external services are required. These are comparisons of deterministic resume-text
+assessments, not verified claims, hiring probabilities, or proof of professional competence.
+Stage 6 manual recruiter testing remains separate from automated regression/UI tests.

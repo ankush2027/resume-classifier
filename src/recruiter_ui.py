@@ -151,3 +151,113 @@ def show_candidate(candidate: RankedCandidate, profile: CandidateProfile, filena
     st.write(candidate.ranking_explanation)
     with st.expander('Candidate Information — structured profile'):
         st.json(profile.to_dict())
+
+
+def show_comparison(ranking: RankingResult) -> None:
+    """Compare existing results; filters do not change the comparison's batch scope."""
+    import pandas as pd
+    from src.comparison import compare_candidates
+    from src.comparison.comparator import source_strength
+
+    st.header('Candidate Comparison')
+    st.caption('Compare 2–4 candidates from the full evaluated batch, including candidates hidden by filters. '
+               'Original ranks and scores are preserved. Clear the selection to return to inspection alone.')
+    available = {c.candidate_id: c for c in ranking.ranked_candidates}
+
+    def clear_comparison():
+        st.session_state['comparison_selection'] = []
+
+    st.button('Clear comparison', key='comparison_clear', on_click=clear_comparison)
+    selected = st.multiselect('Candidates to compare', list(available), key='comparison_selection',
+                              max_selections=4,
+                              format_func=lambda key: f'#{available[key].rank} — {candidate_label(available[key])}')
+    if len(selected) < 2:
+        st.info('Select at least 2 candidates to compare.')
+        return
+    comparison = compare_candidates(ranking, selected)
+    labels = {c.candidate_id: f'#{c.rank} — {candidate_label(c)}' for c in comparison.candidates}
+    overview = {}
+    for candidate in comparison.candidates:
+        overview[labels[candidate.candidate_id]] = {
+            'Original rank': str(candidate.rank),
+            'Stage 3 match': score(candidate.assessment.overall_match_score),
+            'Evidence-adjusted match': score(candidate.ranking_score),
+            'Score coverage': percentage(candidate.score_coverage),
+            'Direct required-skill coverage': percentage(candidate.required_skill_coverage),
+            'Experience requirement': candidate.experience_status,
+            'Education requirement': candidate.education_status,
+        }
+    st.subheader('Comparison overview')
+    st.table(pd.DataFrame(overview))
+
+    def cell(item):
+        if item is None:
+            return 'Unknown / not assessed'
+        description = (f'{item.status.replace("_", " ")} · '
+                       f'{"direct" if item.direct_match else "no direct match"} · '
+                       f'{item.evidence_strength or "strength unavailable"}')
+        if item.transferable:
+            concepts = sorted({e.concept for e in item.evidence
+                               if e.relevance == 'transferable' and e.supports_requirement})
+            description += ' · transferable' + (' via ' + ', '.join(concepts) if concepts else '')
+        if item.evidence:
+            # Select an existing representative quote, not a synthesized explanation.
+            order = {'strong': 0, 'moderate': 1, 'weak': 2}
+            evidence = min(item.evidence, key=lambda e: (not e.supports_requirement,
+                           e.relevance != 'direct', order[e.strength], e.source_type, e.source_text))
+            excerpt = evidence.source_text[:180] + ('…' if len(evidence.source_text) > 180 else '')
+            description += f' | {evidence.source_type}: “{excerpt}”'
+            if not evidence.supports_requirement:
+                description += ' (does not establish requirement)'
+        return description
+
+    for title, rows in [('Required skills comparison', comparison.required_skills),
+                        ('Preferred skills comparison', comparison.preferred_skills)]:
+        st.subheader(title)
+        if rows:
+            st.table(pd.DataFrame({labels[c.candidate_id]: {row.requirement: cell(row.candidates[c.candidate_id])
+                                                          for row in rows} for c in comparison.candidates}))
+        else:
+            st.write('No assessed requirements in this group.')
+    st.caption('Transferable is not direct coverage. Missing means not found in the supplied assessment; '
+               'unknown is not a failed skill check. Quotes are excerpts from resumes, not verified facts.')
+
+    st.subheader('Evidence strength and source')
+    evidence_columns = {}
+    for candidate in comparison.candidates:
+        values = {label.title(): str(candidate.evidence_strength_summary.get(label, 0))
+                  if candidate.evidence_strength_summary else 'Not assessed'
+                  for label in ['strong', 'moderate', 'weak', 'transferable', 'missing', 'unknown']}
+        for source, title in [('experience', 'Professional evidence'), ('project', 'Project evidence')]:
+            evidence = []
+            for row in comparison.required_skills + comparison.preferred_skills:
+                strength = source_strength(row.candidates[candidate.candidate_id], source)
+                if strength:
+                    evidence.append(f'{row.requirement}: {strength}')
+            values[title] = '; '.join(dict.fromkeys(evidence)) or 'No supporting direct snippets'
+        evidence_columns[labels[candidate.candidate_id]] = values
+    st.table(pd.DataFrame(evidence_columns))
+    st.caption('Counts are the existing assessment summary, not points. Source labels describe resume evidence, not verified tenure.')
+    for column, candidate in zip(st.columns(len(comparison.candidates)), comparison.candidates):
+        with column:
+            st.write(labels[candidate.candidate_id])
+            st.write('Strengths')
+            for text in candidate.strengths:
+                st.write('• ' + text)
+            if not candidate.strengths:
+                st.write('None reported by the assessment.')
+            st.write('Gaps / concerns')
+            for text in dict.fromkeys(candidate.assessment.weaknesses + candidate.concerns):
+                st.write('• ' + text)
+            if not (candidate.assessment.weaknesses or candidate.concerns):
+                st.write('None reported; claims still need review.')
+    st.subheader('Why the ranking differs')
+    for candidate in comparison.candidates:
+        st.write(labels[candidate.candidate_id])
+        st.write(candidate.ranking_explanation)
+    st.caption('These explanations concern the original full batch. Pairwise observations below describe '
+               'differences, not additional ranking rules or hiring probabilities.')
+    for pair in comparison.head_to_head:
+        with st.expander(f'{labels[pair.higher_ranked_id]} vs {labels[pair.lower_ranked_id]}'):
+            for observation in pair.observations:
+                st.write(observation)
