@@ -8,7 +8,9 @@ from .rules import classify, mentioned, related, MULTIPLIERS
 def snippets(text):
     # Split clauses while retaining original text, punctuation and technical dots.
     for line in text.splitlines():
-        for fragment in re.split(r'(?<=[.!?;])\s+|\s+but\s+', line):
+        for fragment in re.split(
+                r'(?<=[.!?;])\s+|\s+but\s+|\s+and\s+(?=(?:I\b|am\b|listed\b|(?:am |currently )?learning\b|interested\b|have\b|has\b|not\b|knowledge\b))',
+                line, flags=re.I):
             fragment = fragment.strip()
             if fragment:
                 yield fragment
@@ -26,7 +28,10 @@ def candidate_sources(candidate):
                 sources.append((kind, field, f'{field}[{index}].{attribute}', text))
             if field == 'projects':
                 for number, technology in enumerate(entry.technologies):
-                    sources.append(('project', field, f'{field}[{index}].technologies[{number}]', technology))
+                    # Parsed technologies are derived mentions, not independent claims.
+                    # Keep their full source context whenever the description contains them.
+                    if not mentioned(technology, text):
+                        sources.append(('project', field, f'{field}[{index}].technologies[{number}]', technology))
     for field, kind in [('certifications', 'certification'), ('achievements', 'achievement')]:
         for index, text in enumerate(getattr(candidate, field)):
             sources.append((kind, field, f'{field}[{index}]', text))

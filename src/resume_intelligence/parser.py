@@ -11,7 +11,7 @@ SECTION_ALIASES = {
     'skills': ['skills', 'technical skills', 'key skills', 'core skills', 'technical expertise',
                'programming languages', 'technologies', 'skills and technologies'],
     'education': ['education', 'academic qualifications', 'educational qualifications', 'academic background'],
-    'experience': ['experience', 'work experience', 'employment', 'employment history',
+    'experience': ['experience', 'experience details', 'career experience', 'work experience', 'employment', 'employment history',
                    'professional experience', 'internship', 'internships'],
     'projects': ['projects', 'academic projects', 'personal projects', 'key projects'],
     'certifications': ['certifications', 'certificates', 'licenses and certifications'],

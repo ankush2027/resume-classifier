@@ -1,51 +1,75 @@
-# Resume Classification System 🚀
+# Resume Intelligence & Candidate Evaluation Platform
 
-A machine learning system that automatically classifies real-world resumes into exactly **25 job categories**. 
+A local recruiter prototype for extracting candidate profiles, evaluating resume evidence
+against job requirements, ranking/filtering candidates, and comparing 2–4 candidates.
+Classification into 25 job categories is one component; it does not determine candidate fit.
+The evaluation workflow is deterministic and uses no external AI service.
 
-Built to solve a real-world problem: companies receive resumes from multiple platforms (job portals, email, LinkedIn, etc.) in extremely different formats. This system handles them all automatically. It reads standard **PDFs, Word Documents (.docx), Text files (.txt), and even Image-based Scanned Resumes (.png, .jpg) via OCR!**
+```text
+Resume files → Document Extraction → CandidateProfile
+Job description → Job Intelligence → JobProfile
+CandidateProfile + JobProfile → Candidate ↔ Job Matching → Evidence Assessment
+                             → Ranking + Filtering → Recruiter Dashboard → Candidate Comparison
+```
+
+PDF, DOCX and TXT are supported. Optional OCR supports scanned PDFs and images using
+local dependencies. Complex layouts, DOCX tables and mixed text/scanned PDF pages can
+lose content; the tool does not handle every layout automatically or verify resume claims.
 
 ---
 
 ## 🌟 Key Features
 
 - **Multi-Format Extraction:** Automatically extracts text from `.pdf`, `.docx`, and `.txt`.
-- **Built-in OCR (Optical Character Recognition):** Can read scanned, photograph-based PDFs, `.jpg`, and `.png` image models via `Tesseract` and `pdf2image`.
+- **Optional local OCR:** Scanned documents and images use Tesseract and pdf2image when the Python packages and system tools are installed.
 - **Classification pipeline:** Uses TF-IDF with a classifier selected by training-only validation. Models with probabilities can use the existing keyword fallback below its threshold; LinearSVC returns an ML prediction with confidence shown as N/A. The keyword fallback is not part of the ML benchmark.
-- **Smart Folder Batching:** Drop 100 random files in a folder, run one script, and get 25 beautifully organized folders sorted by job category.
+- **Folder batching:** Classify readable input documents into category CSV files; these operational files may contain candidate information.
 
 ---
 
 ## 🛠 Project Structure
 
 ```text
-resume-classifier/
-│
-├── data/
-│   ├── raw/
-│   │   └── resume_dataset.csv          ← Main ML Training dataset (962 resumes)
-│   └── input/
-│       ├── resumes/                    ← DROP RESUMES HERE (.pdf, .png, .docx)
-│       └── resumes_to_classify.csv     ← Fallback CSV if folder is empty!
-│
-├── src/
-│   ├── main.py                         ← Train models, save best one (Run this first!)
-│   ├── classify_resumes.py             ← Batch classify your 'input/resumes/' folder
-│   └── predict.py                      ← Interactive single-resume terminal tool
-│
-├── models/                             ← Saved generated ML models
-├── output/                             ← Automatically cleared & recreated results
-├── requirements.txt
-└── README.md
+app.py                         # Streamlit recruiter workflow
+src/
+  main.py, preprocessing.py    # Reproducible ML experiment
+  document_extraction.py       # Shared local document readers
+  predict.py, classify_resumes.py
+  resume_intelligence/         # CandidateProfile extraction
+  job_intelligence/            # JobProfile extraction
+  matching/                    # Candidate/job rule-based match
+  evidence/                    # Evidence-aware assessment
+  ranking/                     # Deterministic ranking and filtering
+  comparison/                  # Compare existing evaluated results
+  recruiter_ui.py              # Presentation helpers
+tests/                         # Full pytest regression suite
+data/raw/resume_dataset.csv    # Original benchmark data
+models/                        # Local generated model, ignored by Git
+output/                        # Intentional reports plus operational outputs
+requirements.txt               # Core dependencies
+requirements-ocr.txt           # Optional OCR Python packages
 ```
 
 ---
 
 ## 🚀 How To Install & Run
 
-**If you are downloading this onto a new machine (Mac, Windows, or Linux)**, follow these exact steps to make sure Image/OCR scanning works perfectly:
+The canonical tested environment is **Python 3.9.6** in **`venv`**. For this existing
+checkout, reuse it; do not recreate the environment or retrain a model merely to launch:
+
+```bash
+cd /Users/Ankush/Desktop/resume-classifier
+source venv/bin/activate
+python --version                   # expected: Python 3.9.6
+python -m streamlit run app.py
+```
+
+For a fresh checkout, use the setup below. Verify the interpreter version first;
+do not substitute an arbitrary global Python. Training is needed only when the trusted
+local `models/model.pkl` artifact is absent or an intentional new experiment is desired.
 
 ### 1. Install System Requirements (For OCR Image Scanning)
-To read scanned PDF images or pictures of resumes, this project relies on Poppler and Tesseract.
+Optional OCR requires both the Python packages in `requirements-ocr.txt` and the Poppler/Tesseract system tools. Text PDFs, DOCX and TXT do not need OCR.
 
 **Mac:**
 ```bash
@@ -58,27 +82,38 @@ brew install tesseract poppler
 
 *(Ubuntu: `sudo apt-get install tesseract-ocr poppler-utils`)*
 
-### 2. Set Up Python Environment
+### 2. Set Up Python Environment (fresh checkout only)
 
-**Mac / Linux:**
+Choose an interpreter that reports **Python 3.9.6**. On the original Mac, it is
+`/Library/Developer/CommandLineTools/usr/bin/python3`; confirm before using it:
+
 ```bash
-cd resume-classifier
-python3 -m venv venv
+/Library/Developer/CommandLineTools/usr/bin/python3 --version
+/Library/Developer/CommandLineTools/usr/bin/python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+python -m pip install pytest==8.4.2
 ```
 
-**Windows:**
-```powershell
-cd resume-classifier
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+On another machine, replace that executable with the absolute path to your verified
+Python 3.9.6 installation. On Windows activate with `venv\Scripts\activate`.
+The core ML versions are pinned in `requirements.txt`; the checked UI environment uses
+Streamlit 1.50.0, pdfplumber 0.11.8 and python-docx 1.2.0. Unpinned packages are not a
+complete environment lock.
+
+If you need OCR, after activating the environment run:
+
+```bash
+python -m pip install -r requirements-ocr.txt
+tesseract --version
+pdftoppm -v
 ```
-*(Note: `requirements.txt` should include `pdfplumber`, `python-docx`, `pytesseract`, `pdf2image`, `pandas`, `scikit-learn`, `pillow`.)*
+
+No OCR package installation is needed for text-only testing. Installation alone does
+not establish extraction accuracy on your scanned documents.
 
 ### 3. Train the Model 🧠
-You **must** run this first! It compares three pipelines using training-only two-fold cross-validation, selects by macro-F1, then evaluates once on held-out resumes and saves the complete pipeline. Legacy 100% results were affected by duplicate and TF-IDF leakage and are not valid unseen-resume performance.
+Run this only if a model is missing or you intentionally want to repeat the experiment. It compares three pipelines using training-only two-fold cross-validation, selects by macro-F1, then evaluates once on held-out resumes and saves the complete pipeline. Legacy 100% results were affected by duplicate and TF-IDF leakage and are not valid unseen-resume performance.
 ```bash
 python src/main.py   # Use python3 on Mac/Linux
 ```
@@ -98,10 +133,10 @@ Need to check just one candidate quickly? Run:
 ```bash
 python src/predict.py   # Use python3 on Mac/Linux
 ```
-It will open an interactive prompt. You can **paste a file path** (`/Users/You/resume.pdf` or `.png`) directly, or just copy and paste raw resume text to instantly see a breakdown of the ML prediction and accuracy!
+It will open an interactive prompt. You can **paste a file path** (`/Users/You/resume.pdf` or `.png`) directly, or just copy and paste raw resume text to instantly see the predicted category and available model confidence—not an accuracy measurement!
 
 ### 6. Launch the Web App (Streamlit UI) 🌐
-> ⚠️ **You must complete Step 3 (Train the Model) before this step**, otherwise the app will show an error because `models/model.pkl` does not exist yet.
+> A trusted `models/model.pkl` must exist. Reuse the existing artifact; follow Step 3 only if it is missing.
 
 ```bash
 streamlit run app.py
@@ -121,7 +156,7 @@ This opens the recruiter dashboard: enter a job, upload resumes, evaluate, filte
 Use Python 3.9.6 with the pinned ML dependencies. Run from the repository root:
 
 ```bash
-python -m unittest discover -s tests -v
+pytest -q
 python src/main.py
 ```
 
@@ -143,7 +178,8 @@ has no probabilities: confidence is displayed as N/A and this alone never trigge
 keyword fallback. Keyword overrides also display N/A and are outside the ML benchmark.
 
 There are few unique resumes per category; a small held-out result is preliminary.
-Exact/normalized duplicate separation does not establish independence of near-duplicate
+The recorded 88.24% accuracy is **30/34 held-out test examples**, not production accuracy
+and not validation of candidate ranking. Exact/normalized duplicate separation does not establish independence of near-duplicate
 templates or prove real-world candidate performance. Tests repeat the fixed experiment
 only to verify reproducibility, not to tune against test results.
 
@@ -194,7 +230,7 @@ each readable upload, including the full structured profile and evidence. Existi
 classification results remain visible. Uploads use temporary files rather than
 writing into the project's output directory.
 
-Run all tests with `python -m unittest discover -s tests -v`. Stage 1 parser unit tests
+Run the full automated suite with `pytest -q` (after activating `venv`). Stage 1 parser unit tests
 use synthetic text. Local integration tests additionally use the three PDFs under
 `pdf/` when available, without modifying them; those local files are not committed.
 OCR routes are tested with mocks, not proof of OCR accuracy on scanned documents.
@@ -410,7 +446,7 @@ Run all regression tests (pytest is a development-only tool):
 
 ```bash
 python -m pip install pytest==8.4.2
-python -m pytest -q
+pytest -q
 ```
 
 ## Stage 6: Recruiter dashboard and end-to-end workflow
@@ -467,7 +503,7 @@ processing. Large batches can take time and memory. Stage 0–5 domain rules are
 requires a job before evaluation; the earlier profile-upload UI regression now supplies
 that job while keeping its classification/profile assertions.
 
-Run `python -m pytest -q` for the full regression suite. Stage 6 AppTest cases use synthetic
+Run `pytest -q` for the full regression suite. Stage 6 AppTest cases use synthetic
 uploads and check the workflow, failure handling, invalidation and service call counts.
 
 ## Stage 7: Candidate comparison
@@ -508,3 +544,25 @@ or ranking. Stage 6 still checks uploaded content hashes on reruns. No extra dep
 or external services are required. These are comparisons of deterministic resume-text
 assessments, not verified claims, hiring probabilities, or proof of professional competence.
 Stage 6 manual recruiter testing remains separate from automated regression/UI tests.
+
+
+## Finalization corrections and local-data hygiene
+
+Evidence retains negative/hypothetical context instead of reusing extracted project
+technology tokens as independent positive claims. Familiarity, interest and knowledge-only
+wording do not establish direct use. Limited clause rules keep these qualifications from
+borrowing unrelated work actions; they are not a general language-understanding system.
+Known job-heading variants end required/preferred context explicitly. Experience Details
+and Career Experience are recognized resume headings. Simple bare education fields such
+as B.Tech Computer Science are compared literally; unparsed restrictions remain unknown.
+A nonmatching degree field retains the existing unknown education state, not an invented
+rejection or a claim that the candidate has no other qualifications.
+
+Git ignores real upload folders, `pdf/`, generated classification CSVs, logs, caches,
+local secrets and model archives. It intentionally does **not** ignore all of `output/`:
+experiment metadata, current/historical evaluation reports and archive notes remain
+reviewable. Ignore rules do not untrack existing files. Already-tracked operational CSVs,
+logs and `.DS_Store` should be considered separately for a controlled cleanup; nothing
+is automatically deleted. Keep the tracked input sample only as a deliberate synthetic
+fixture, never replace it with private resumes and commit it. Resume data is not anonymized
+by using hashed candidate identifiers.

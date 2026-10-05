@@ -1,0 +1,5 @@
+# Optional Python readers used by src/document_extraction.py.
+# Also requires local Tesseract and Poppler executables; see README.
+pytesseract
+pdf2image
+Pillow

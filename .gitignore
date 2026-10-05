@@ -1,2 +1,26 @@
+# Local environments, caches and machine configuration
 venv/
-models/*.pkl
+.venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Real uploads and local QA documents; retain the empty input-directory marker.
+/data/input/resumes/*
+!/data/input/resumes/.gitkeep
+/pdf/
+/uploads/
+
+# Generated models, including legacy model archives, are not experiment reports.
+/models/*.pkl
+/output/legacy/**/models/
+
+# Operational classification results and runtime logs.
+# Do not ignore output/ wholesale: reports, metadata and historical evidence stay visible.
+/output/*_resumes.csv
+*.log

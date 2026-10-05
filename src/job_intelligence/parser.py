@@ -4,9 +4,12 @@ from src.resume_intelligence.parser import DEGREE, extract_skills
 from .models import JobProfile
 
 SECTIONS = {
+    'required': 'required', 'must have skills': 'required',
     'requirements': 'required', 'required skills': 'required', 'must have': 'required',
     'mandatory': 'required', 'minimum qualifications': 'required',
+    'other skills': 'unknown', 'additional skills': 'unknown', 'additional qualifications': 'unknown',
     'qualifications': 'qualifications', 'skills': 'unknown',
+    'preferred': 'preferred', 'nice to have skills': 'preferred', 'good to have': 'preferred',
     'preferred skills': 'preferred', 'preferred qualifications': 'preferred',
     'nice to have': 'preferred', 'bonus': 'preferred',
     'responsibilities': 'responsibilities', "what you'll do": 'responsibilities',

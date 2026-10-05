@@ -113,9 +113,28 @@ def _degree(text):
     return None
 
 
-def _field(text):
-    match = re.search(r'\bin\s+(.+?)(?:[.;]|$)', text, re.I)
-    return ' '.join(match.group(1).casefold().split()) if match else None
+def _education_field(text):
+    """Return (field, safely parsed). A missing parse is not an absent restriction.
+
+    Explicit 'in' fields retain the existing literal comparison. Bare fields cover
+    simple discipline phrases such as B.Tech Computer Science, not university,
+    grade, accreditation or other qualification constraints.
+    """
+    degree = DEGREE.search(text)
+    if not degree:
+        return None, False
+    prefix = text[:degree.start()].strip().casefold()
+    if prefix not in {'', 'a', 'an', 'required', 'minimum', 'must have', 'requires'}:
+        return None, False
+    suffix = text[degree.end():].strip().strip('.').strip()
+    suffix = re.sub(r'^degree\b', '', suffix, flags=re.I).strip()
+    if not suffix:
+        return None, True
+    if re.fullmatch(r'in\s+[A-Za-z]+(?:[ -][A-Za-z]+){0,5}', suffix, re.I):
+        return ' '.join(suffix[3:].casefold().split()), True
+    if re.fullmatch(r'(?:[A-Za-z]+[ -]){0,4}(?:science|engineering|technology|mathematics|physics|chemistry|arts|commerce)', suffix, re.I):
+        return ' '.join(suffix.casefold().split()), True
+    return None, False
 
 
 def _education(candidate, requirements):
@@ -124,13 +143,17 @@ def _education(candidate, requirements):
     if len(requirements) != 1 or _uncertain_wording(requirements[0]):
         return 'unknown', 'Education wording is optional, ambiguous, or contains multiple requirements.'
     wanted = _degree(requirements[0])
-    wanted_field = _field(requirements[0])
+    wanted_field, safely_parsed = _education_field(requirements[0])
+    if not safely_parsed:
+        return 'unknown', 'Stated education restrictions could not be interpreted safely.'
     if not wanted:
         return 'unknown', 'No supported degree equivalence identified.'
     for entry in candidate.education:
         if _degree(entry.degree) != wanted:
             continue
-        field = ' '.join((entry.field or _field(entry.degree or '') or '').casefold().split())
+        source = entry.source_text.splitlines()[0] if entry.source_text else entry.degree or ''
+        parsed_field, _ = _education_field(source)
+        field = ' '.join((entry.field or parsed_field or '').strip().rstrip('.').casefold().split())
         if wanted_field is None or field == wanted_field:
             return 'satisfied', 'Degree family and stated field match; completion/accreditation is not verified.'
     return 'unknown', 'Education evidence does not establish the requested degree family and field.'

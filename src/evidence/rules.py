@@ -17,7 +17,7 @@ DOMAINS = {
 }
 ACTION = re.compile(r'\b(?:built|developed|implemented|maintained|deployed|containerized|designed|created|automated|optimized|integrated|tested|operated|migrated|managed|worked on)\b', re.I)
 OBJECT = re.compile(r'\b(?:APIs?|services?|applications?|systems?|pipelines?|models?|databases?|backend|frontend|infrastructure|platforms?|notebooks?|analysis|containers?|websites?|tools?)\b', re.I)
-UNSUPPORTED = re.compile(r"\b(?:no|not|never|without|lack|lacking|plan(?:ning)?|want|wish|interested|aspir(?:e|ing)|learning|hoping|would|could|will)\b|\b(?:don[’']t|didn[’']t|haven[’']t)\b", re.I)
+UNSUPPORTED = re.compile(r"\b(?:no|not|never|without|lack|lacking|plan(?:ning)?|want|wish|interest|interested|unrelated|aspir(?:e|ing)|learning|hoping|would|could|will)\b|\b(?:don[’']t|didn[’']t|haven[’']t)\b", re.I)
 INDIRECT = re.compile(r'\b(?:team where|team used|team uses|exposure to|familiar with|aware of|observed|assisted|helped)\b', re.I)
 CERTIFICATION = re.compile(r'\b(?:certified|certification|certificate|completed|credential)\b', re.I)
 
@@ -31,8 +31,9 @@ def mentioned(concept, text):
 
 
 def classify(source_type, text):
-    if UNSUPPORTED.search(text):
-        return 'weak', False, 'Negated, hypothetical, or learning wording does not establish use.'
+    if (UNSUPPORTED.search(text) or
+            re.search(r'\b(?:familiar with|knowledge only|only knowledge)\b', text, re.I)):
+        return 'weak', False, 'Negated, hypothetical, interest-only, or familiarity wording does not establish use.'
     if INDIRECT.search(text):
         return 'weak', True, 'Indirect exposure wording does not establish personal responsibility.'
     concrete = bool(ACTION.search(text) and OBJECT.search(text))
